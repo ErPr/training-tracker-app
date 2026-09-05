@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Training Procedure Tracker</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0A0D11">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" type="image/png" href="./icon-192.png">
+<!-- v2.1 republish -->
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0E1116; --panel:#161C25; --panel2:#1D2530; --line:#2A3441;
+    --text:#E8EDF2; --dim:#8A97A6; --faint:#5A6675;
+    --amber:#FFB000; --amber-dim:#7A5600; --teal:#4FC8B4; --red:#E05A4E;
+    --radius:10px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  html{font-size:16px;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:'Inter',system-ui,sans-serif;
+    min-height:100vh; padding-bottom:90px;
+  }
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;}
+  .disp{font-family:'Chakra Petch','Inter',sans-serif;}
+
+  /* ---------- header ---------- */
+  header{
+    padding:18px 16px 12px; border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#12161D 0%, var(--bg) 100%);
+  }
+  .hdr-eyebrow{font-family:'JetBrains Mono',monospace; font-size:.65rem; letter-spacing:.18em; color:var(--amber); text-transform:uppercase;}
+  h1{font-family:'Chakra Petch',sans-serif; font-size:1.35rem; font-weight:700; letter-spacing:.02em; margin-top:2px;}
+  .hdr-sub{font-size:.75rem; color:var(--dim); margin-top:2px;}
+
+  .weekbar{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-top:14px; background:var(--panel); border:1px solid var(--line);
+    border-radius:var(--radius); padding:10px 12px;
+  }
+  .weekbar .lbl{font-family:'JetBrains Mono',monospace; font-size:.62rem; letter-spacing:.14em; color:var(--dim); text-transform:uppercase;}
+  .weekbar .val{font-family:'Chakra Petch',sans-serif; font-size:1.15rem; font-weight:700; color:var(--amber);}
+  .stepbtn{
+    width:38px; height:38px; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--text); font-size:1.2rem; font-weight:600;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .stepbtn:active{background:var(--line);}
+  .runprogress{display:flex; gap:5px; margin-top:8px;}
+  .runpip{height:5px; flex:1; border-radius:3px; background:var(--line);}
+  .runpip.done{background:var(--teal);}
+  .weekhint{font-size:.68rem; color:var(--faint); margin-top:6px;}
+
+  /* ---------- week sequence ---------- */
+  .seqhead{display:flex; align-items:center; justify-content:space-between; margin-top:12px;}
+  .seqhead .lbl{font-family:'JetBrains Mono',monospace; font-size:.62rem; letter-spacing:.14em; color:var(--dim); text-transform:uppercase;}
+  .seqtoggle{background:none; border:none; color:var(--dim); font-size:.8rem; cursor:pointer; padding:4px 8px;}
+  .seq{display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-top:6px;}
+  .seq.hidden{display:none;}
+  .chip{
+    border:1px solid var(--line); background:var(--panel); border-radius:7px;
+    padding:6px 2px; text-align:center; cursor:pointer;
+  }
+  .chip .d{font-family:'JetBrains Mono',monospace; font-size:.5rem; color:var(--faint);}
+  .chip .n{font-family:'Chakra Petch',sans-serif; font-size:.55rem; font-weight:600; margin-top:1px;}
+  .chip.cur{border-color:var(--amber); background:#211C10;}
+  .chip.cur .n{color:var(--amber);}
+  .chip.donechip{opacity:.45;}
+  .chip.donechip .n::after{content:" ✓"; color:var(--teal);}
+  .seqhint{font-size:.65rem; color:var(--faint); margin-top:5px;}
+  .seqhint b{color:var(--amber); font-weight:600;}
+
+  /* ---------- history log ---------- */
+  .histbar{
+    display:block; width:calc(100% - 32px); margin:10px 16px 0;
+    background:none; border:1px dashed var(--line); border-radius:8px;
+    color:var(--dim); font-family:'JetBrains Mono',monospace; font-size:.62rem;
+    letter-spacing:.14em; padding:8px; cursor:pointer; text-transform:uppercase;
+  }
+  .hrec{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:11px 12px; margin-bottom:8px;
+  }
+  .hrec-top{display:flex; justify-content:space-between; align-items:baseline;}
+  .hrec-date{font-family:'JetBrains Mono',monospace; font-size:.68rem; color:var(--amber);}
+  .hrec-name{font-family:'Chakra Petch',sans-serif; font-size:.8rem; font-weight:600;}
+  .hrec-line{font-family:'JetBrains Mono',monospace; font-size:.66rem; color:var(--dim); margin-top:4px; line-height:1.5;}
+  .hrec-line b{color:var(--text); font-weight:500;}
+  .progrow{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:8px 12px; background:var(--panel); border:1px solid var(--line);
+    border-radius:8px; margin-bottom:6px;
+  }
+  .progrow .pn{font-size:.78rem;}
+  .progrow .pv{font-family:'JetBrains Mono',monospace; font-size:.72rem; color:var(--teal);}
+  .progrow .pv .arrow{color:var(--faint);}
+  .empty-log{text-align:center; color:var(--faint); font-size:.75rem; padding:30px 20px;}
+  .hbtn{
+    background:none; border:1px solid var(--line); border-radius:6px; color:var(--dim);
+    font-family:'JetBrains Mono',monospace; font-size:.58rem; letter-spacing:.08em;
+    padding:4px 8px; cursor:pointer; text-transform:uppercase;
+  }
+  .hbtn.warn{border-color:var(--red); color:var(--red);}
+  .hbtn.go{border-color:var(--teal); color:var(--teal);}
+  .heditrow{display:flex; align-items:center; gap:6px; margin-top:6px;}
+  .heditrow .hname{font-size:.68rem; color:var(--dim); width:82px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .heditrow .setlbl{font-family:'JetBrains Mono',monospace; font-size:.58rem; color:var(--faint); width:22px;}
+  .hstep{
+    width:26px; height:26px; border-radius:6px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--text); font-size:.7rem; cursor:pointer;
+    font-family:'JetBrains Mono',monospace;
+  }
+  .hval{font-family:'JetBrains Mono',monospace; font-size:.75rem; font-weight:700; min-width:34px; text-align:center; color:var(--amber);}
+  .hval.reps{color:var(--teal);}
+  .hactions{display:flex; gap:8px; margin-top:10px; justify-content:flex-end;}
+  .hrec.flash{border-color:var(--amber); box-shadow:0 0 0 1px var(--amber); transition:border-color .4s, box-shadow .4s;}
+
+  /* ---------- run timer ---------- */
+  .rc-start{
+    display:block; width:100%; margin-top:10px; padding:12px; border-radius:10px;
+    border:1px solid var(--teal); background:rgba(45,212,191,.08); color:var(--teal);
+    font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:.8rem; letter-spacing:.08em; cursor:pointer;
+  }
+  .run-overlay{
+    position:fixed; inset:0; background:var(--bg); z-index:130;
+    display:none; flex-direction:column; padding:16px 16px 24px;
+  }
+  .run-overlay.open{display:flex;}
+  .ro-top{display:flex; justify-content:space-between; align-items:center;}
+  .ro-code{font-family:'JetBrains Mono',monospace; font-size:.72rem; color:var(--dim); letter-spacing:.08em;}
+  .ro-phase{
+    text-align:center; font-family:'Chakra Petch',sans-serif; font-weight:700;
+    font-size:2rem; letter-spacing:.14em; margin-top:8vh;
+  }
+  .ro-phase.jog{color:var(--teal);} .ro-phase.walk{color:var(--amber);} .ro-phase.warm,.ro-phase.cool{color:var(--dim);}
+  .ro-count{
+    text-align:center; font-family:'JetBrains Mono',monospace; font-weight:700;
+    font-size:4.6rem; margin:1vh 0 0; font-variant-numeric:tabular-nums;
+  }
+  .ro-int{text-align:center; color:var(--dim); font-family:'JetBrains Mono',monospace; font-size:.85rem; height:1.2em;}
+  .ro-strip{display:flex; gap:2px; margin:4vh 0 10px; height:10px;}
+  .ro-seg{border-radius:2px; background:var(--panel2); min-width:3px;}
+  .ro-seg.jog{background:rgba(45,212,191,.35);} .ro-seg.walk{background:rgba(230,167,86,.3);}
+  .ro-seg.done{opacity:.28;}
+  .ro-seg.cur{outline:1px solid var(--text);}
+  .ro-meta{display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:.8rem; color:var(--dim);}
+  .ro-meta b{color:var(--text); font-weight:700;}
+  .ro-ctl{display:flex; gap:10px; margin-top:auto;}
+  .ro-skip{
+    width:64px; border-radius:12px; border:1px solid var(--line); background:var(--panel);
+    color:var(--text); font-size:1.3rem; cursor:pointer; padding:16px 0;
+  }
+  .ro-pause{
+    flex:1; border-radius:12px; border:1px solid var(--amber); background:rgba(230,167,86,.1);
+    color:var(--amber); font-family:'Chakra Petch',sans-serif; font-weight:700;
+    font-size:1.05rem; letter-spacing:.12em; cursor:pointer; padding:16px 0;
+  }
+  .ro-pause.paused{border-color:var(--teal); color:var(--teal); background:rgba(45,212,191,.1);}
+  .exportbtn{
+    width:100%; margin:10px 0 4px; padding:10px; border-radius:10px;
+    border:1px dashed var(--line); background:none; color:var(--dim);
+    font-family:'JetBrains Mono',monospace; font-size:.7rem; letter-spacing:.05em; cursor:pointer;
+  }
+  .export-modal{
+    position:fixed; inset:0; background:rgba(10,13,17,.96); z-index:120;
+    display:none; flex-direction:column; padding:14px;
+  }
+  .export-modal.open{display:flex;}
+  .export-ta{
+    flex:1; width:100%; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    color:var(--text); padding:12px; font-family:'JetBrains Mono',monospace; font-size:.68rem;
+    resize:none; margin:10px 0;
+  }
+  .export-row{display:flex; gap:8px;}
+  .export-row button{
+    flex:1; padding:12px; border-radius:10px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--text); font-family:'Chakra Petch',sans-serif;
+    font-weight:700; font-size:.8rem; cursor:pointer;
+  }
+  .export-row button.primary{border-color:var(--teal); color:var(--teal);}
+
+  /* ---------- coach mode ---------- */
+  .completebar-row{display:flex; gap:10px;}
+  .coachbtn{
+    width:54px; min-width:54px; border-radius:12px; border:1px solid var(--teal);
+    background:var(--panel); color:var(--teal); cursor:pointer;
+    font-family:'Chakra Petch',sans-serif; font-size:.6rem; font-weight:700; letter-spacing:.05em;
+  }
+  .coach-panel{
+    position:fixed; inset:0; background:rgba(10,13,17,.96); z-index:100;
+    display:none; flex-direction:column; padding:14px 14px 18px;
+  }
+  .coach-panel.open{display:flex;}
+  .coach-head{display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; border-bottom:1px solid var(--line);}
+  .coach-title{font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:.95rem; color:var(--teal);}
+  .coach-msgs{flex:1; overflow-y:auto; padding:12px 2px; display:flex; flex-direction:column; gap:10px;}
+  .cmsg{max-width:88%; padding:10px 12px; border-radius:12px; font-size:.85rem; line-height:1.45;}
+  .cmsg.user{align-self:flex-end; background:#26313F; border:1px solid var(--line);}
+  .cmsg.coach{align-self:flex-start; background:#122823; border:1px solid #234A42;}
+  .cmsg.sys{align-self:center; background:none; color:var(--faint); font-size:.68rem; font-family:'JetBrains Mono',monospace;}
+  .coach-ctl{display:flex; gap:8px; align-items:center; padding-top:10px;}
+  .micbtn{
+    width:52px; height:52px; min-width:52px; border-radius:50%; border:2px solid var(--teal);
+    background:var(--panel); color:var(--teal); font-size:1.2rem; cursor:pointer;
+  }
+  .micbtn.live{background:var(--red); border-color:var(--red); color:#fff; animation:pulse 1.2s infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(224,90,78,.5);}50%{box-shadow:0 0 0 10px rgba(224,90,78,0);}}
+  .coach-input{
+    flex:1; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    color:var(--text); padding:12px; font-size:.85rem; font-family:'Inter',sans-serif;
+  }
+  .coach-input:focus{outline:none; border-color:var(--teal);}
+  .sendbtn{
+    width:52px; height:52px; min-width:52px; border-radius:10px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--text); font-size:1rem; cursor:pointer;
+  }
+  .ttsbtn{background:none; border:none; color:var(--dim); font-size:1.1rem; cursor:pointer; padding:6px;}
+  .ttsbtn.off{opacity:.35;}
+  .closebtn{background:none; border:none; color:var(--dim); font-size:1.3rem; cursor:pointer; padding:6px;}
+  @media (prefers-reduced-motion: reduce){ .micbtn.live{animation:none;} }
+
+  /* ---------- session tabs ---------- */
+  .tabs{
+    display:grid; grid-template-columns:repeat(5,1fr); gap:6px;
+    padding:14px 16px 4px;
+  }
+  .tab{
+    border:1px solid var(--line); background:var(--panel); border-radius:var(--radius);
+    padding:10px 6px 8px; text-align:center; cursor:pointer; position:relative;
+  }
+  .tab .code{font-family:'JetBrains Mono',monospace; font-size:.58rem; letter-spacing:.1em; color:var(--faint);}
+  .tab .name{font-family:'Chakra Petch',sans-serif; font-size:.78rem; font-weight:600; margin-top:2px;}
+  .tab.active{border-color:var(--amber); background:#211C10;}
+  .tab.active .code{color:var(--amber);}
+  .tab .last{font-size:.55rem; color:var(--faint); margin-top:3px; font-family:'JetBrains Mono',monospace;}
+
+  /* ---------- procedure card ---------- */
+  .proc{padding:12px 16px;}
+  .proc-head{
+    display:flex; align-items:baseline; justify-content:space-between;
+    border-bottom:2px solid var(--amber); padding-bottom:8px; margin-bottom:4px;
+  }
+  .proc-id{font-family:'JetBrains Mono',monospace; font-size:.68rem; letter-spacing:.14em; color:var(--amber);}
+  .proc-time{font-family:'JetBrains Mono',monospace; font-size:.68rem; color:var(--dim);}
+  .proc-title{font-family:'Chakra Petch',sans-serif; font-size:1.05rem; font-weight:700; margin:8px 0 2px;}
+  .proc-note{font-size:.78rem; color:var(--dim); line-height:1.45; margin-bottom:10px;}
+
+  .phase{
+    font-family:'JetBrains Mono',monospace; font-size:.62rem; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--dim);
+    margin:16px 0 8px; display:flex; align-items:center; gap:10px;
+  }
+  .phase::after{content:''; flex:1; height:1px; background:var(--line);}
+
+  .item{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    margin-bottom:8px; overflow:hidden;
+  }
+  .item-row{display:flex; align-items:center; gap:12px; padding:12px; cursor:pointer;}
+  .chk{
+    width:30px; height:30px; min-width:30px; border-radius:7px;
+    border:2px solid var(--faint); display:flex; align-items:center; justify-content:center;
+    font-family:'Chakra Petch',sans-serif; font-size:.6rem; font-weight:700; color:transparent;
+  }
+  .item.done .chk{border-color:var(--amber); background:var(--amber); color:#14100A;}
+  .item.done .item-name{color:var(--dim); text-decoration:line-through; text-decoration-color:var(--faint);}
+  .item-name{font-size:.88rem; font-weight:500; flex:1;}
+  .item-target{font-family:'JetBrains Mono',monospace; font-size:.72rem; color:var(--teal); white-space:nowrap;}
+  .item-sub{font-size:.7rem; color:var(--faint); margin-top:2px;}
+
+  /* lift logger */
+  .logger{border-top:1px dashed var(--line); padding:10px 12px; background:var(--panel2); display:none;}
+  .item.open .logger{display:block;}
+  .logrow{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+  .logrow:last-child{margin-bottom:0;}
+  .logrow .setlbl{font-family:'JetBrains Mono',monospace; font-size:.62rem; color:var(--faint); width:34px;}
+  .numfield{display:flex; align-items:center; gap:6px; flex:1;}
+  .numbtn{
+    width:32px; height:32px; border-radius:7px; border:1px solid var(--line);
+    background:var(--panel); color:var(--text); font-size:1rem; cursor:pointer;
+  }
+  .numval{
+    font-family:'JetBrains Mono',monospace; font-size:.9rem; font-weight:700;
+    min-width:52px; text-align:center; color:var(--amber);
+  }
+  .numunit{font-size:.6rem; color:var(--faint);}
+  .expand-hint{font-size:.6rem; color:var(--faint); font-family:'JetBrains Mono',monospace;}
+
+  /* run card */
+  .runcard{
+    background:linear-gradient(135deg,#122823 0%, var(--panel) 60%);
+    border:1px solid #234A42; border-radius:var(--radius); padding:14px; margin-bottom:8px;
+  }
+  .runcard .rc-lbl{font-family:'JetBrains Mono',monospace; font-size:.6rem; letter-spacing:.15em; color:var(--teal); text-transform:uppercase;}
+  .runcard .rc-main{font-family:'Chakra Petch',sans-serif; font-size:1rem; font-weight:600; margin-top:4px; line-height:1.4;}
+  .runcard .rc-sub{font-size:.72rem; color:var(--dim); margin-top:4px;}
+
+  /* complete button */
+  .completebar{
+    position:fixed; bottom:0; left:0; right:0; padding:12px 16px 20px;
+    background:linear-gradient(180deg, rgba(14,17,22,0) 0%, var(--bg) 35%);
+  }
+  .gobtn{
+    width:100%; padding:15px; border-radius:12px; border:none; cursor:pointer;
+    font-family:'Chakra Petch',sans-serif; font-size:.95rem; font-weight:700; letter-spacing:.08em;
+    background:var(--amber); color:#14100A; text-transform:uppercase;
+  }
+  .gobtn:disabled{background:var(--panel2); color:var(--faint); border:1px solid var(--line);}
+  .gobtn.stamped{background:var(--teal); color:#0A1512;}
+
+  /* toast */
+  .toast{
+    position:fixed; top:14px; left:50%; transform:translateX(-50%) translateY(-80px);
+    background:var(--panel2); border:1px solid var(--amber); color:var(--text);
+    padding:10px 18px; border-radius:10px; font-size:.8rem; z-index:50;
+    transition:transform .3s ease; font-family:'JetBrains Mono',monospace;
+  }
+  .toast.show{transform:translateX(-50%) translateY(0);}
+
+  .restcard{
+    text-align:center; padding:40px 20px; color:var(--dim);
+  }
+  .restcard .disp{font-size:1.2rem; color:var(--text); margin-bottom:8px;}
+  .footer-note{padding:4px 16px 12px; font-size:.65rem; color:var(--faint); text-align:center;}
+  @media (prefers-reduced-motion: reduce){ .toast{transition:none;} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr-eyebrow">Integrated Training // KAZ + LBA + C25K + Lifts</div>
+  <h1>TRAINING PROCEDURES</h1>
+  <div class="hdr-sub">Range before load. Never through sharp pain. Long game.</div>
+
+  <div class="weekbar">
+    <button class="stepbtn" id="wkDown" aria-label="Previous C25K week">&#8722;</button>
+    <div style="text-align:center;">
+      <div class="lbl">C25K Week</div>
+      <div class="val mono" id="wkVal">1</div>
+    </div>
+    <button class="stepbtn" id="wkUp" aria-label="Next C25K week">+</button>
+  </div>
+  <div class="runprogress" id="runPips"></div>
+  <div class="weekhint" id="wkHint"></div>
+  <div class="seqhead">
+    <span class="lbl">Week Sequence</span>
+    <span>
+      <button class="seqtoggle" id="seqSkip" aria-label="Skip to next session in cycle">skip ▸</button>
+      <button class="seqtoggle" id="seqToggle" aria-label="Show or hide week sequence">▾</button>
+    </span>
+  </div>
+  <div class="seq" id="seqStrip"></div>
+  <div class="seqhint" id="seqHint"></div>
+</header>
+
+<nav class="tabs" id="tabs"></nav>
+<button class="histbar" id="histBtn">Training Log ▸</button>
+<main class="proc" id="proc"></main>
+<div class="footer-note">Weights save as new baselines when you stamp a session complete.</div>
+
+<div class="completebar" id="completeBar">
+  <div class="completebar-row">
+    <button class="coachbtn" id="coachOpen">COACH</button>
+    <button class="gobtn" id="goBtn" style="flex:1;">Stamp Session Complete</button>
+  </div>
+</div>
+
+<div class="run-overlay" id="runOv">
+  <div class="ro-top">
+    <span class="ro-code" id="roCode">C25K</span>
+    <span>
+      <button class="ttsbtn" id="roSnd" aria-label="Toggle run audio cues">🔊</button>
+      <button class="closebtn" id="roX" aria-label="Exit run timer">✕</button>
+    </span>
+  </div>
+  <div class="ro-phase" id="roPhase">READY</div>
+  <div class="ro-count" id="roCount">--:--</div>
+  <div class="ro-int" id="roInt"></div>
+  <div class="ro-strip" id="roStrip"></div>
+  <div class="ro-meta">
+    <span>ELAPSED <b id="roEl">00:00</b></span>
+    <span>REMAIN <b id="roRem">--:--</b></span>
+  </div>
+  <div class="ro-ctl">
+    <button class="ro-skip" id="roBack" aria-label="Previous interval">«</button>
+    <button class="ro-pause" id="roPause">PAUSE</button>
+    <button class="ro-skip" id="roFwd" aria-label="Next interval">»</button>
+  </div>
+</div>
+
+<div class="coach-panel" id="coachPanel">
+  <div class="coach-head">
+    <span class="coach-title">◉ COACH</span>
+    <span>
+      <button class="ttsbtn" id="keyBtn" aria-label="API key settings">⚙</button>
+      <button class="ttsbtn" id="ttsBtn" aria-label="Toggle spoken responses">🔊</button>
+      <button class="closebtn" id="coachClose" aria-label="Close coach">✕</button>
+    </span>
+  </div>
+  <div class="coach-msgs" id="coachMsgs">
+    <div class="cmsg sys">Talk or type. I can see your current session, logged weights, and history.</div>
+  </div>
+  <div class="coach-ctl">
+    <button class="micbtn" id="micBtn" aria-label="Talk to coach">🎙</button>
+    <input class="coach-input" id="coachInput" placeholder="or type here..." />
+    <button class="sendbtn" id="coachSend" aria-label="Send">➤</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= DATA ================= */
+const C25K = {
+ 1:"8 rounds: 60s jog / 90s walk",
+ 2:"6 rounds: 90s jog / 2:00 walk",
+ 3:"2 rounds: 90s jog, 90s walk, 3:00 jog, 3:00 walk",
+ 4:"3:00 jog, 90s walk, 5:00 jog, 2:30 walk, 3:00 jog, 90s walk, 5:00 jog",
+ 5:"R1: 3x 5:00 jog / 3:00 walk · R2: 2x 8:00 jog / 5:00 walk · R3: 20:00 continuous",
+ 6:"R1: 5:00-8:00-5:00 jogs w/ 3:00 walks · R2: 2x 10:00 jog / 3:00 walk · R3: 25:00 continuous",
+ 7:"25:00 continuous jog",
+ 8:"28:00 continuous jog",
+ 9:"30:00 continuous jog — 5K"
+};
+const WKHINTS = {
+ 1:"Coming off a layoff: easy pace, nose-breathing effort.",
+ 4:"Common repeat point. Repeating a week is normal, not a setback.",
+ 5:"Run 3 is the first continuous 20 min. Slow is fine.",
+ 9:"Final week. 30 minutes = your 5K."
+};
+
+const SESSIONS = {
+ push:{
+  code:"PROC PUSH-01", name:"Push", time:"60-70 min",
+  note:"Main lifts, then LBA upper back, then stretch block.",
+  phases:[
+   {label:"Main Lifts", items:[
+     {id:"chestpress", name:"Chest Press", lift:true, sets:3, defW:100, defR:8, sub:"Warm-up 50x10 first. Add 5-10 lb when all sets hit 8 clean."},
+     {id:"shoulderpress", name:"Shoulder Press", lift:true, sets:3, defW:70, defR:8, sub:"Ramp: 50x8 warm-up. Back stays comfortable."},
+     {id:"fly", name:"Machine Chest Fly", lift:true, sets:3, defW:75, defR:12, sub:"Warm-up 31x12. Last set hit 17 — ready to bump."},
+     {id:"latraise", name:"DB Seated Lateral Raise", lift:true, sets:3, defW:10, defR:15, sub:"Add reps first, then 12s."},
+     {id:"tris", name:"Triceps Superset x3", sub:"Skullcrusher 15 lb x12-15 + banded extension x15", target:"3 rounds"}
+   ]},
+   {label:"Stretch Block (5-8 min)", items:[
+     {id:"s1", name:"Doorway chest stretch", target:"45s"},
+     {id:"s2", name:"Cross-body shoulder", target:"30s/side"},
+     {id:"s3", name:"Overhead triceps + lat", target:"30s/side"},
+     {id:"s4", name:"Thoracic extension over bench", target:"45s", sub:"Doubles as LBA work."}
+   ]}
+  ]
+ },
+ pull:{
+  code:"PROC PULL-01", name:"Pull", time:"50-60 min",
+  note:"First session is calibration: find clean 10-rep weights with 2-3 in reserve, log them.",
+  phases:[
+   {label:"Main Lifts", items:[
+     {id:"latpull", name:"Lat Pulldown", lift:true, sets:3, defW:70, defR:10, sub:"Calibrate session 1."},
+     {id:"row", name:"Chest-Supported Row", lift:true, sets:3, defW:70, defR:10, sub:"Keeps low back out of it. No bent-over BB rows yet."},
+     {id:"dbrow", name:"Single-Arm DB Row", lift:true, sets:3, defW:30, defR:10, sub:"Per side."},
+     {id:"reardelt", name:"Rear Delt Fly", lift:true, sets:3, defW:45, defR:12, sub:"Light, strict."},
+     {id:"bis", name:"Biceps Superset x3", sub:"DB curl x10-12 + band curl x15", target:"3 rounds"}
+   ]},
+   {label:"LBA Upper Back", items:[
+     {id:"pullover", name:"DB Pullover", lift:true, sets:2, defW:15, defR:12, sub:"Thoracic stretch focus, not load."},
+     {id:"trap3", name:"Trap-3 Raise", lift:true, sets:2, defW:3, defR:12, sub:"Absurdly light is correct. +1 lb at a time."},
+     {id:"hang", name:"Dead Hang x2", target:"20-30s", sub:"Grip + spinal decompression."}
+   ]},
+   {label:"Stretch Block (5 min)", items:[
+     {id:"s1", name:"Overhead lat stretch / hang", target:"30s"},
+     {id:"s2", name:"Child's pose w/ side reach", target:"45s/side"},
+     {id:"s3", name:"Upper trap stretch", target:"30s/side"},
+     {id:"s4", name:"Doorway biceps stretch", target:"30s/side"}
+   ]}
+  ]
+ },
+ legs:{
+  code:"PROC LEG-01", name:"Legs", time:"60-70 min",
+  note:"LBA spine work FIRST while fresh, then hips, then lifts, then stretch.",
+  phases:[
+   {label:"LBA Spine + Hips (first)", items:[
+     {id:"iso", name:"Back Extension Iso Hold x2", target:"build to 2:00", sub:"Sharp pain or spasm = regress one level."},
+     {id:"hip4", name:"4-Way Hip", target:"1 round", sub:"Hip flexor raises 10/s, ext. rotations 10/s, couch stretch 60s/s, adductor squeeze-stretch 60s"}
+   ]},
+   {label:"Main Lifts", items:[
+     {id:"legpress", name:"Leg Press", lift:true, sets:3, defW:208, defR:10, sub:"3x10 clean, then 220-230."},
+     {id:"hamcurl", name:"Hamstring Curl", lift:true, sets:3, defW:77, defR:10, sub:"Add 3rd set, then weight."},
+     {id:"legext", name:"Leg Extension", lift:true, sets:3, defW:66, defR:8, sub:"66x5 felt strong — work up to 66x8."},
+     {id:"lpcalf", name:"Leg Press Calf Raise", lift:true, sets:2, defW:100, defR:12, sub:"Full stretch at bottom, 1s pause. Replaces standing machine."}
+   ]},
+   {label:"Stretch Block (5-8 min)", items:[
+     {id:"s1", name:"Hamstring fold", target:"60s", sub:"Relaxed gentle rounding is the LBA point."},
+     {id:"s2", name:"Figure-4 glute", target:"45s/side"},
+     {id:"s3", name:"Calf on step, straight + bent knee", target:"45s/side"},
+     {id:"s4", name:"Quad stretch (skip if couch stretch done)", target:"45s/side"}
+   ]}
+  ]
+ },
+ runfull:{
+  code:"PROC RUN-F", name:"Run Full", time:"45-55 min", run:true,
+  note:"KAZ warm-up, C25K intervals, KAZ finish. Runs A + C.",
+  phases:[
+   {label:"KAZ Warm-Up (Steps 1-4)", items:[
+     {id:"bw", name:"Backward walking", target:"5 min"},
+     {id:"tib", name:"Tibialis raises", target:"25"},
+     {id:"fhl", name:"FHL calf raises", target:"25"},
+     {id:"kot", name:"KOT calf raises", target:"25"}
+   ]},
+   {label:"C25K Run", items:[
+     {id:"run", name:"Run intervals", runcard:true}
+   ]},
+   {label:"KAZ Finish (Steps 5-9) + Stretch", items:[
+     {id:"pstep", name:"Patrick step", target:"25/side"},
+     {id:"atg", name:"ATG split squat (regressed)", target:"5/side"},
+     {id:"eleph", name:"Elephant walk", target:"30 reps"},
+     {id:"lsit", name:"L-sit / seated leg raise", target:"6 x 10s"},
+     {id:"couch", name:"Couch stretch", target:"60s/side"},
+     {id:"calfst", name:"Calf stretch on step", target:"45s/side"},
+     {id:"fig4", name:"Figure-4 glute", target:"30s/side"}
+   ]}
+  ]
+ },
+ runlite:{
+  code:"PROC RUN-L", name:"Run Lite", time:"35-40 min", run:true,
+  note:"Trimmed warm-up and finisher. Run B, day after legs — slide it if quads are wrecked.",
+  phases:[
+   {label:"Warm-Up", items:[
+     {id:"bw", name:"Backward walking", target:"5 min"},
+     {id:"tib", name:"Tibialis raises", target:"25"},
+     {id:"kot", name:"KOT calf raises", target:"25"}
+   ]},
+   {label:"C25K Run", items:[
+     {id:"run", name:"Run intervals", runcard:true}
+   ]},
+   {label:"Finish", items:[
+     {id:"eleph", name:"Elephant walk", target:"30 reps"},
+     {id:"couch", name:"Couch stretch", target:"60s/side"},
+     {id:"calfst", name:"Calf stretch on step", target:"45s/side"}
+   ]}
+  ]
+ }
+};
+
+/* ================= STATE ================= */
+const KEY = "training-tracker-v1";
+const SEQ = [
+  {tab:"push",    d:"D1", n:"PUSH"},
+  {tab:"runfull", d:"D2", n:"RUN F"},
+  {tab:"legs",    d:"D3", n:"LEGS"},
+  {tab:"runlite", d:"D4", n:"RUN L"},
+  {tab:"pull",    d:"D5", n:"PULL"},
+  {tab:"runfull", d:"D6", n:"RUN F"},
+  {tab:null,      d:"D7", n:"REST"}
+];
+let S = {
+  week:1, runsThisWeek:0, tab:"push", view:"session",
+  cycleIdx:0, cycleDone:[], seqHidden:false,
+  lifts:{},          // "session.itemid" -> [{w,r}...]
+  checks:{},         // per active tab: "tab.itemid" -> true
+  lastDone:{},       // tab -> ISO date
+  memFallback:false
+};
+
+const HKEY = "training-history-v1";
+let HIST = [];
+let HEDIT = null;      // original index of record being edited
+let FLASH_REC = null;  // record index to scroll to and highlight after a chip tap
+let HDELARM = false;   // delete confirmation armed
+
+async function loadState(){
+  let hasState=false;
+  try{
+    const res = localStorage.getItem(KEY);
+    if(res){ Object.assign(S, JSON.parse(res)); hasState=true; }
+  }catch(e){ /* first run or unavailable */ }
+  try{
+    const h = localStorage.getItem(HKEY);
+    if(h){ HIST = JSON.parse(h); hasState=true; }
+  }catch(e){ /* no history yet */ }
+  if(S.cycleIdx===undefined) S.cycleIdx=0;
+  if(!Array.isArray(S.cycleDone)) S.cycleDone=[];
+  if(!S.view) S.view="session";
+  // open on whatever's next in the cycle
+  const nxt = SEQ[Math.min(S.cycleIdx,6)];
+  if(nxt && nxt.tab) S.tab = nxt.tab;
+  render();
+  if(!hasState) showImport(true);
+}
+async function saveHistory(){
+  try{ localStorage.setItem(HKEY, JSON.stringify(HIST)); }
+  catch(e){ toast("LOG SAVE FAILED — session still stamped"); }
+}
+let saveTimer=null;
+function saveState(){
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{
+    try{ localStorage.setItem(KEY, JSON.stringify(S)); }
+    catch(e){ S.memFallback=true; }
+  }, 400);
+}
+
+/* ================= IMPORT ================= */
+function showImport(firstRun){
+  let m=document.getElementById("importModal");
+  if(!m){
+    m=document.createElement("div");
+    m.id="importModal"; m.className="export-modal";
+    m.innerHTML='<div class="proc-head"><span class="proc-id">IMPORT LOG</span></div>'+
+      '<div style="color:var(--dim);font-size:.8rem;line-height:1.5;margin:8px 0;" id="importMsg"></div>'+
+      '<textarea class="export-ta" id="importTa" placeholder=\'Paste an export here — the JSON from the tracker&apos;s "Export Log" button.\'></textarea>'+
+      '<div class="export-row">'+
+      '<button id="importGo" class="primary">Import</button>'+
+      '<button id="importSkip">Start Fresh</button></div>';
+    document.body.appendChild(m);
+    document.getElementById("importSkip").onclick=()=>m.classList.remove("open");
+    document.getElementById("importGo").onclick=()=>{
+      const raw=document.getElementById("importTa").value.trim();
+      if(!raw){ toast("NOTHING TO IMPORT"); return; }
+      try{
+        const p=JSON.parse(raw);
+        if(!Array.isArray(p.history)) throw new Error("no history array");
+        HIST=p.history;
+        if(p.cycle){
+          if(p.cycle.week) S.week=p.cycle.week;
+          if(typeof p.cycle.runsThisWeek==="number") S.runsThisWeek=p.cycle.runsThisWeek;
+          if(typeof p.cycle.cycleIdx==="number") S.cycleIdx=p.cycle.cycleIdx;
+          else if(typeof p.cycle.seqPos==="number") S.cycleIdx=p.cycle.seqPos;
+          if(Array.isArray(p.cycle.cycleDone)) S.cycleDone=p.cycle.cycleDone;
+        }
+        saveHistory(); saveState();
+        m.classList.remove("open");
+        render();
+        toast("IMPORTED "+HIST.length+" SESSIONS ✓");
+      }catch(e){ toast("COULDN'T READ THAT EXPORT — CHECK THE PASTE"); }
+    };
+  }
+  document.getElementById("importMsg").textContent = firstRun
+    ? "Fresh install. If you have an export from the Claude artifact version, paste it below to carry your whole log over. Otherwise start fresh."
+    : "Paste an export to merge-replace the current log (this overwrites what's here).";
+  m.classList.add("open");
+}
+
+/* ================= HELPERS ================= */
+function liftSets(tab,item){
+  const k=tab+"."+item.id;
+  if(!S.lifts[k]){
+    S.lifts[k]=Array.from({length:item.sets},()=>({w:item.defW,r:item.defR}));
+  }
+  // pad if sets increased
+  while(S.lifts[k].length<item.sets) S.lifts[k].push({w:item.defW,r:item.defR});
+  return S.lifts[k];
+}
+function fmtDate(iso){
+  if(!iso) return "—";
+  const d=new Date(iso);
+  return (d.getMonth()+1)+"/"+d.getDate();
+}
+function toast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"), 2200);
+}
+
+/* ================= RENDER ================= */
+function render(){
+  renderWeek(); renderSeq(); renderTabs();
+  const hb=document.getElementById("histBtn");
+  hb.textContent = S.view==="history" ? "◂ Back to Sessions" : "Training Log ▸";
+  hb.onclick=()=>{ S.view = S.view==="history" ? "session" : "history"; saveState(); render(); };
+  document.getElementById("completeBar").style.display = S.view==="history" ? "none" : "";
+  if(S.view==="history"){ renderHistory(); } else { renderProc(); renderGo(); }
+}
+
+function renderHistory(){
+  const el=document.getElementById("proc");
+  el.innerHTML="";
+  const head=document.createElement("div");
+  head.innerHTML='<div class="proc-head"><span class="proc-id">TRAINING LOG</span>'+
+    '<span class="proc-time">'+HIST.length+' sessions</span></div>';
+  el.appendChild(head);
+
+  const exp=document.createElement("button");
+  exp.className="exportbtn";
+  exp.textContent="⇩ Export Log";
+  exp.onclick=showExport;
+  el.appendChild(exp);
+
+  const imp=document.createElement("button");
+  imp.className="exportbtn";
+  imp.textContent="⇧ Import Log";
+  imp.onclick=()=>showImport(false);
+  el.appendChild(imp);
+
+  if(HIST.length===0){
+    const e=document.createElement("div");
+    e.className="empty-log";
+    e.textContent="No stamped sessions yet. Complete a session and it logs here automatically.";
+    el.appendChild(e);
+    return;
+  }
+
+  // progression summary: first vs latest top weight per exercise
+  const firstW={}, lastW={};
+  HIST.forEach(rec=>{
+    if(!rec.lifts) return;
+    Object.entries(rec.lifts).forEach(([name,sets])=>{
+      const top=Math.max(...sets.map(s=>s.w));
+      if(!(name in firstW)) firstW[name]=top;
+      lastW[name]=top;
+    });
+  });
+  const progNames=Object.keys(lastW).filter(n=>lastW[n]!==firstW[n]);
+  if(progNames.length){
+    const pl=document.createElement("div");
+    pl.className="phase"; pl.textContent="Progression Since Start";
+    el.appendChild(pl);
+    progNames.forEach(n=>{
+      const d=document.createElement("div");
+      d.className="progrow";
+      d.innerHTML='<span class="pn">'+n+'</span>'+
+        '<span class="pv">'+firstW[n]+' <span class="arrow">→</span> '+lastW[n]+' lb</span>';
+      el.appendChild(d);
+    });
+  }
+
+  const pl2=document.createElement("div");
+  pl2.className="phase"; pl2.textContent="Session History";
+  el.appendChild(pl2);
+
+  HIST.map((rec,i)=>({rec,i})).reverse().forEach(({rec,i})=>{
+    const d=new Date(rec.d);
+    const ds=(d.getMonth()+1)+"/"+d.getDate()+"/"+String(d.getFullYear()).slice(2);
+    const div=document.createElement("div");
+    div.className="hrec";
+    div.dataset.rec=i;
+    const editing = (HEDIT===i);
+
+    let top='<div class="hrec-top"><span class="hrec-name">'+rec.name+'</span>'+
+      '<span style="display:flex;gap:8px;align-items:center;">'+
+      '<span class="hrec-date">'+ds+'</span>'+
+      (editing?'':'<button class="hbtn" data-edit="'+i+'">edit</button>')+
+      '</span></div>';
+    let lines="";
+
+    if(rec.week) lines+='<div class="hrec-line">C25K <b>Week '+rec.week+'</b> · '+(rec.rx||"")+'</div>';
+
+    if(!editing){
+      if(rec.lifts){
+        Object.entries(rec.lifts).forEach(([name,sets])=>{
+          lines+='<div class="hrec-line"><b>'+name+'</b> '+sets.map(s=>s.w+"×"+s.r).join(", ")+'</div>';
+        });
+      }
+      div.innerHTML=top+lines;
+    } else {
+      if(rec.lifts){
+        Object.entries(rec.lifts).forEach(([name,sets])=>{
+          sets.forEach((st,si)=>{
+            lines+='<div class="heditrow">'+
+              '<span class="hname">'+(si===0?name:"")+'</span>'+
+              '<span class="setlbl">S'+(si+1)+'</span>'+
+              '<button class="hstep" data-a="w-5" data-n="'+name+'" data-s="'+si+'">-5</button>'+
+              '<button class="hstep" data-a="w-1" data-n="'+name+'" data-s="'+si+'">-1</button>'+
+              '<span class="hval">'+st.w+'</span>'+
+              '<button class="hstep" data-a="w1" data-n="'+name+'" data-s="'+si+'">+1</button>'+
+              '<button class="hstep" data-a="w5" data-n="'+name+'" data-s="'+si+'">+5</button>'+
+              '<button class="hstep" data-a="r-1" data-n="'+name+'" data-s="'+si+'">-</button>'+
+              '<span class="hval reps">'+st.r+'</span>'+
+              '<button class="hstep" data-a="r1" data-n="'+name+'" data-s="'+si+'">+</button>'+
+              '</div>';
+          });
+        });
+      } else {
+        lines+='<div class="hrec-line">No lift data on this record. You can still delete it.</div>';
+      }
+      lines+='<div class="hactions">'+
+        '<button class="hbtn warn" id="hDel">'+(HDELARM?'confirm delete':'delete record')+'</button>'+
+        '<button class="hbtn go" id="hDone">done</button></div>';
+      div.innerHTML=top+lines;
+    }
+    el.appendChild(div);
+
+    if(!editing){
+      const eb=div.querySelector('[data-edit]');
+      if(eb) eb.onclick=()=>{ HEDIT=i; HDELARM=false; render(); };
+    } else {
+      div.querySelectorAll(".hstep").forEach(b=>{
+        b.onclick=()=>{
+          const sets=HIST[i].lifts[b.dataset.n];
+          const st=sets[+b.dataset.s];
+          const a=b.dataset.a;
+          if(a==="w-5")st.w=Math.max(0,st.w-5);
+          if(a==="w-1")st.w=Math.max(0,st.w-1);
+          if(a==="w1")st.w+=1;
+          if(a==="w5")st.w+=5;
+          if(a==="r-1")st.r=Math.max(0,st.r-1);
+          if(a==="r1")st.r+=1;
+          HDELARM=false;
+          saveHistory(); render();
+        };
+      });
+      div.querySelector("#hDone").onclick=()=>{ HEDIT=null; HDELARM=false; saveHistory(); render(); toast("RECORD UPDATED"); };
+      div.querySelector("#hDel").onclick=()=>{
+        if(!HDELARM){ HDELARM=true; render(); return; }
+        HIST.splice(i,1);
+        HEDIT=null; HDELARM=false;
+        saveHistory(); render(); toast("RECORD DELETED");
+      };
+    }
+  });
+
+  if(FLASH_REC!==null){
+    const t=el.querySelector('[data-rec="'+FLASH_REC+'"]');
+    FLASH_REC=null;
+    if(t){
+      t.classList.add("flash");
+      setTimeout(()=>t.scrollIntoView({behavior:"smooth",block:"center"}),60);
+      setTimeout(()=>t.classList.remove("flash"),2400);
+    }
+  }
+}
+
+function renderSeq(){
+  const strip=document.getElementById("seqStrip");
+  const hint=document.getElementById("seqHint");
+  const tog=document.getElementById("seqToggle");
+  strip.classList.toggle("hidden", S.seqHidden);
+  tog.textContent = S.seqHidden ? "▸" : "▾";
+  tog.onclick=()=>{ S.seqHidden=!S.seqHidden; saveState(); render(); };
+  document.getElementById("seqSkip").onclick=()=>{
+    S.cycleIdx++;
+    if(S.cycleIdx>6){ S.cycleIdx=0; S.cycleDone=[]; toast("NEW CYCLE STARTED"); }
+    saveState(); render();
+  };
+  strip.innerHTML="";
+  SEQ.forEach((step,i)=>{
+    const c=document.createElement("div");
+    c.className="chip"+(i===S.cycleIdx?" cur":"")+(S.cycleDone.includes(i)?" donechip":"");
+    c.setAttribute("role","button");
+    c.innerHTML='<div class="d">'+step.d+'</div><div class="n">'+step.n+'</div>';
+    c.onclick=()=>{
+      if(step.tab && S.cycleDone.includes(i)){
+        // Completed day: jump to its record in the log for review/correction
+        const target=SESSIONS[step.tab].name;
+        let idx=-1;
+        for(let k=HIST.length-1;k>=0;k--){ if(HIST[k].name===target){idx=k;break;} }
+        if(idx>=0){ FLASH_REC=idx; S.view="history"; saveState(); render(); }
+        else { S.tab=step.tab; S.view="session"; saveState(); render(); toast("NO LOG RECORD FOR "+step.n.toUpperCase()); }
+      }
+      else if(step.tab){ S.tab=step.tab; S.view="session"; saveState(); render(); }
+      else { S.cycleDone=[]; S.cycleIdx=0; saveState(); render(); toast("REST LOGGED · NEW CYCLE"); }
+    };
+    strip.appendChild(c);
+  });
+  if(S.seqHidden){ hint.textContent=""; return; }
+  const cur=SEQ[Math.min(S.cycleIdx,6)];
+  hint.innerHTML = cur.tab
+    ? 'Up next: <b>'+cur.n+'</b> ('+cur.d+') — days slide freely, keep a day between runs.'
+    : 'Up next: <b>REST</b> — tap the chip to log it and start a new cycle.';
+}
+
+function advanceCycle(tab){
+  let pos=-1;
+  for(let i=S.cycleIdx;i<6;i++){ if(SEQ[i].tab===tab){pos=i;break;} }
+  if(pos<0){ for(let i=0;i<6;i++){ if(SEQ[i].tab===tab && !S.cycleDone.includes(i)){pos=i;break;} } }
+  if(pos>=0){
+    if(!S.cycleDone.includes(pos)) S.cycleDone.push(pos);
+    S.cycleIdx=Math.max(S.cycleIdx,pos+1);
+  }
+}
+
+function renderWeek(){
+  document.getElementById("wkVal").textContent = S.week;
+  const pips=document.getElementById("runPips");
+  pips.innerHTML="";
+  for(let i=0;i<3;i++){
+    const p=document.createElement("div");
+    p.className="runpip"+(i<S.runsThisWeek?" done":"");
+    pips.appendChild(p);
+  }
+  const hint = WKHINTS[S.week] || "3 runs completes the week. Repeat any week that feels rough.";
+  document.getElementById("wkHint").textContent =
+    "Runs this week: "+S.runsThisWeek+"/3 · "+hint;
+}
+
+function renderTabs(){
+  const el=document.getElementById("tabs"); el.innerHTML="";
+  Object.entries(SESSIONS).forEach(([id,s])=>{
+    const t=document.createElement("div");
+    t.className="tab"+(S.tab===id?" active":"");
+    t.setAttribute("role","button");
+    t.innerHTML='<div class="code">'+s.code.split(" ")[1]+'</div>'+
+                '<div class="name">'+s.name+'</div>'+
+                '<div class="last">'+fmtDate(S.lastDone[id])+'</div>';
+    t.onclick=()=>{ S.tab=id; render(); saveState(); };
+    el.appendChild(t);
+  });
+}
+
+function renderProc(){
+  const sess=SESSIONS[S.tab];
+  const el=document.getElementById("proc");
+  el.innerHTML="";
+
+  const head=document.createElement("div");
+  head.innerHTML=
+    '<div class="proc-head"><span class="proc-id">'+sess.code+' · REV A</span>'+
+    '<span class="proc-time">'+sess.time+'</span></div>'+
+    '<div class="proc-title">'+sess.name.toUpperCase()+' SESSION</div>'+
+    '<div class="proc-note">'+sess.note+'</div>';
+  el.appendChild(head);
+
+  sess.phases.forEach(ph=>{
+    const pl=document.createElement("div");
+    pl.className="phase"; pl.textContent=ph.label;
+    el.appendChild(pl);
+
+    ph.items.forEach(item=>{
+      const ck = S.checks[S.tab+"."+item.id];
+      const div=document.createElement("div");
+      div.className="item"+(ck?" done":"");
+
+      if(item.runcard){
+        div.className="runcard";
+        div.style.cursor="pointer";
+        div.innerHTML='<div class="rc-lbl">Week '+S.week+' Prescription</div>'+
+          '<div class="rc-main">'+C25K[S.week]+'</div>'+
+          '<div class="rc-sub">5 min brisk walk first · '+(ck?"✓ logged":"tap when complete")+'</div>'+
+          '<button class="rc-start">▶ START RUN TIMER</button>';
+        if(ck){div.style.opacity=".55";}
+        div.onclick=()=>{ S.checks[S.tab+"."+item.id]=!ck; render(); saveState(); };
+        div.querySelector(".rc-start").onclick=(e)=>{ e.stopPropagation(); openRun(); };
+        el.appendChild(div);
+        return;
+      }
+
+      let inner=
+        '<div class="item-row">'+
+          '<div class="chk">GO</div>'+
+          '<div style="flex:1;"><div class="item-name">'+item.name+'</div>'+
+          (item.sub?'<div class="item-sub">'+item.sub+'</div>':'')+'</div>'+
+          (item.target?'<span class="item-target">'+item.target+'</span>':'')+
+          (item.lift?'<span class="expand-hint">LOG ▾</span>':'')+
+        '</div>';
+
+      if(item.lift){
+        const sets=liftSets(S.tab,item);
+        inner+='<div class="logger">';
+        sets.forEach((st,i)=>{
+          inner+='<div class="logrow"><span class="setlbl">S'+(i+1)+'</span>'+
+            '<div class="numfield">'+
+              '<button class="numbtn" data-act="w-" data-set="'+i+'">−</button>'+
+              '<span class="numval">'+st.w+'</span><span class="numunit">lb</span>'+
+              '<button class="numbtn" data-act="w+" data-set="'+i+'">+</button>'+
+            '</div>'+
+            '<div class="numfield">'+
+              '<button class="numbtn" data-act="r-" data-set="'+i+'">−</button>'+
+              '<span class="numval" style="color:var(--teal);">'+st.r+'</span><span class="numunit">reps</span>'+
+              '<button class="numbtn" data-act="r+" data-set="'+i+'">+</button>'+
+            '</div></div>';
+        });
+        inner+='</div>';
+      }
+      div.innerHTML=inner;
+
+      const row=div.querySelector(".item-row");
+      row.onclick=(e)=>{
+        if(item.lift && !div.classList.contains("open") && !S.checks[S.tab+"."+item.id]){
+          div.classList.add("open"); return;
+        }
+        S.checks[S.tab+"."+item.id]=!S.checks[S.tab+"."+item.id];
+        render(); saveState();
+      };
+      if(item.lift){
+        div.querySelectorAll(".numbtn").forEach(b=>{
+          b.onclick=(e)=>{
+            e.stopPropagation();
+            const sets=liftSets(S.tab,item);
+            const i=+b.dataset.set, act=b.dataset.act;
+            const stepW = item.defW>=50?5:1;
+            if(act==="w+")sets[i].w+=stepW;
+            if(act==="w-")sets[i].w=Math.max(0,sets[i].w-stepW);
+            if(act==="r+")sets[i].r+=1;
+            if(act==="r-")sets[i].r=Math.max(0,sets[i].r-1);
+            saveState();
+            const wasOpen=true;
+            render();
+            // reopen this logger after rerender
+            reopen(S.tab,item.id);
+          };
+        });
+      }
+      el.appendChild(div);
+    });
+  });
+}
+
+function reopen(tab,itemId){
+  // find item div by matching name via data attr — simpler: mark open set
+  const sess=SESSIONS[tab];
+  const el=document.getElementById("proc");
+  let idx=0;
+  sess.phases.forEach(ph=>ph.items.forEach(item=>{
+    if(item.runcard){idx++;return;}
+    if(item.id===itemId){
+      const items=el.querySelectorAll(".item, .runcard");
+      if(items[idx]) items[idx].classList.add("open");
+    }
+    idx++;
+  }));
+}
+
+function sessionComplete(){
+  const sess=SESSIONS[S.tab];
+  let total=0, done=0;
+  sess.phases.forEach(ph=>ph.items.forEach(it=>{
+    total++;
+    if(S.checks[S.tab+"."+it.id]) done++;
+  }));
+  return {total,done};
+}
+
+function renderGo(){
+  const {total,done}=sessionComplete();
+  const btn=document.getElementById("goBtn");
+  btn.disabled = done===0;
+  btn.classList.remove("stamped");
+  btn.textContent = done===0 ? "Check items to begin"
+    : "Stamp Complete ("+done+"/"+total+")";
+}
+
+document.getElementById("goBtn").onclick=()=>{
+  const sess=SESSIONS[S.tab];
+  S.lastDone[S.tab]=new Date().toISOString();
+  // build history record before clearing checks
+  const rec={d:new Date().toISOString(), name:sess.name, tab:S.tab};
+  const liftLog={};
+  sess.phases.forEach(ph=>ph.items.forEach(it=>{
+    if(it.lift && S.checks[S.tab+"."+it.id]){
+      liftLog[it.name]=liftSets(S.tab,it).map(s=>({w:s.w,r:s.r}));
+    }
+  }));
+  if(Object.keys(liftLog).length) rec.lifts=liftLog;
+  if(sess.run){ rec.week=S.week; rec.rx=C25K[S.week]; }
+  HIST.push(rec);
+  saveHistory();
+  advanceCycle(S.tab);
+  const nxtStep=SEQ[Math.min(S.cycleIdx,6)];
+  if(nxtStep.tab) S.tab=nxtStep.tab;
+  // clear checks for this session
+  sess.phases.forEach(ph=>ph.items.forEach(it=>{ delete S.checks[S.tab+"."+it.id]; }));
+  let msg="SESSION STAMPED · "+sess.code;
+  if(sess.run){
+    S.runsThisWeek++;
+    if(S.runsThisWeek>=3){
+      if(S.week<9){ S.week++; S.runsThisWeek=0; msg="WEEK "+ (S.week-1) +" COMPLETE → WEEK "+S.week; }
+      else { msg="C25K COMPLETE. 5K RUNNER."; S.runsThisWeek=3; }
+    }
+  }
+  saveState(); render(); toast(msg);
+  const btn=document.getElementById("goBtn");
+  btn.classList.add("stamped"); btn.textContent="STAMPED ✓";
+  setTimeout(renderGo, 1600);
+};
+
+document.getElementById("wkUp").onclick=()=>{ if(S.week<9){S.week++; S.runsThisWeek=0; saveState(); render();} };
+document.getElementById("wkDown").onclick=()=>{ if(S.week>1){S.week--; S.runsThisWeek=0; saveState(); render();} };
+
+/* ================= RUN TIMER ================= */
+let RT={segs:[],i:0,rem:0,run:false,int:null,last:0,snd:true,wl:null,exitArm:false};
+const SEGNAMES={warm:"WARM-UP WALK",jog:"JOG",walk:"WALK",cool:"COOL-DOWN"};
+
+function buildSegs(week,runIdx){
+  const j=s=>({k:"jog",s}), w=s=>({k:"walk",s});
+  let mid=[];
+  switch(week){
+    case 1: for(let i=0;i<8;i++) mid.push(j(60),w(90)); break;
+    case 2: for(let i=0;i<6;i++) mid.push(j(90),w(120)); break;
+    case 3: for(let i=0;i<2;i++) mid.push(j(90),w(90),j(180),w(180)); break;
+    case 4: mid=[j(180),w(90),j(300),w(150),j(180),w(90),j(300)]; break;
+    case 5: mid=[[j(300),w(180),j(300),w(180),j(300)],[j(480),w(300),j(480)],[j(1200)]][runIdx]; break;
+    case 6: mid=[[j(300),w(180),j(480),w(180),j(300)],[j(600),w(180),j(600)],[j(1500)]][runIdx]; break;
+    case 7: mid=[j(1500)]; break;
+    case 8: mid=[j(1680)]; break;
+    default: mid=[j(1800)];
+  }
+  return [{k:"warm",s:300},...mid,{k:"cool",s:300}];
+}
+
+let AC=null;
+function beep(freq,dur,when){
+  if(!RT.snd) return;
+  try{
+    AC=AC||new (window.AudioContext||window.webkitAudioContext)();
+    const t=AC.currentTime+(when||0);
+    const o=AC.createOscillator(), g=AC.createGain();
+    o.frequency.value=freq; o.connect(g); g.connect(AC.destination);
+    g.gain.setValueAtTime(.18,t); g.gain.exponentialRampToValueAtTime(.001,t+dur);
+    o.start(t); o.stop(t+dur);
+  }catch(e){}
+}
+function speakCue(text){
+  if(!RT.snd) return;
+  try{
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);
+    u.rate=1.05;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+function fmt(s){ s=Math.max(0,Math.ceil(s)); return String(Math.floor(s/60)).padStart(2,"0")+":"+String(Math.floor(s%60)).padStart(2,"0"); }
+
+function segCue(seg){
+  if(seg.k==="jog"){ beep(880,.12); beep(880,.12,.18); }
+  else if(seg.k==="walk"){ beep(440,.2); }
+  else { beep(600,.15); }
+  const mins=Math.floor(seg.s/60), secs=seg.s%60;
+  let dur = mins? mins+(secs? " and a half":"")+" minute"+(mins>1?"s":"") : secs+" seconds";
+  if(secs && secs!==30) dur=fmt(seg.s);
+  speakCue(SEGNAMES[seg.k].toLowerCase().replace("-"," ")+", "+dur+".");
+}
+
+function openRun(){
+  const runIdx=Math.min(Math.max(S.runsThisWeek,0),2);
+  RT.segs=buildSegs(S.week,runIdx);
+  RT.i=0; RT.rem=RT.segs[0].s; RT.run=true; RT.last=Date.now(); RT.exitArm=false;
+  document.getElementById("roCode").textContent="C25K · WEEK "+S.week+" · RUN "+(runIdx+1);
+  document.getElementById("runOv").classList.add("open");
+  document.getElementById("roPause").textContent="PAUSE";
+  document.getElementById("roPause").classList.remove("paused");
+  buildStrip(); paintRun();
+  segCue(RT.segs[0]);
+  try{ if(navigator.wakeLock) navigator.wakeLock.request("screen").then(w=>RT.wl=w).catch(()=>{}); }catch(e){}
+  if(RT.int) clearInterval(RT.int);
+  RT.int=setInterval(tickRun,500);
+}
+function closeRun(){
+  if(RT.int){ clearInterval(RT.int); RT.int=null; }
+  RT.run=false;
+  try{ if(RT.wl){ RT.wl.release(); RT.wl=null; } }catch(e){}
+  try{ speechSynthesis.cancel(); }catch(e){}
+  document.getElementById("runOv").classList.remove("open");
+}
+function buildStrip(){
+  const st=document.getElementById("roStrip");
+  st.innerHTML="";
+  const total=RT.segs.reduce((a,s)=>a+s.s,0);
+  RT.segs.forEach((seg,idx)=>{
+    const d=document.createElement("div");
+    d.className="ro-seg "+seg.k;
+    d.style.flexGrow=seg.s/total*100;
+    d.dataset.seg=idx;
+    st.appendChild(d);
+  });
+}
+function paintRun(){
+  const seg=RT.segs[RT.i];
+  const ph=document.getElementById("roPhase");
+  ph.textContent=SEGNAMES[seg.k];
+  ph.className="ro-phase "+seg.k;
+  document.getElementById("roCount").textContent=fmt(RT.rem);
+  const jogsTotal=RT.segs.filter(s=>s.k==="jog").length;
+  if(seg.k==="jog"||seg.k==="walk"){
+    const jogsSoFar=RT.segs.slice(0,RT.i+1).filter(s=>s.k==="jog").length;
+    document.getElementById("roInt").textContent=Math.max(jogsSoFar,1)+" of "+jogsTotal;
+  } else document.getElementById("roInt").textContent="";
+  let done=0;
+  for(let k=0;k<RT.i;k++) done+=RT.segs[k].s;
+  const elapsed=done+(seg.s-RT.rem);
+  const total=RT.segs.reduce((a,s)=>a+s.s,0);
+  document.getElementById("roEl").textContent=fmt(elapsed);
+  document.getElementById("roRem").textContent=fmt(total-elapsed);
+  document.querySelectorAll(".ro-seg").forEach(d=>{
+    const idx=+d.dataset.seg;
+    d.classList.toggle("done",idx<RT.i);
+    d.classList.toggle("cur",idx===RT.i);
+  });
+}
+function tickRun(){
+  if(!RT.run){ RT.last=Date.now(); return; }
+  const now=Date.now();
+  RT.rem-=(now-RT.last)/1000;
+  RT.last=now;
+  if(RT.rem<=0){
+    RT.i++;
+    if(RT.i>=RT.segs.length){ finishRun(); return; }
+    RT.rem=RT.segs[RT.i].s+RT.rem;
+    segCue(RT.segs[RT.i]);
+  }
+  paintRun();
+}
+function jumpSeg(dir){
+  const ni=RT.i+dir;
+  if(ni<0||ni>=RT.segs.length) return;
+  RT.i=ni; RT.rem=RT.segs[ni].s; RT.last=Date.now();
+  segCue(RT.segs[ni]); paintRun();
+}
+function finishRun(){
+  beep(880,.15); beep(1100,.15,.2); beep(1320,.3,.4);
+  speakCue("Run complete. Well done.");
+  S.checks[S.tab+".run"]=true;
+  saveState();
+  closeRun();
+  render();
+  toast("RUN LOGGED ✓ — FINISH THE SESSION AND STAMP");
+}
+function setupRun(){
+  document.getElementById("roX").onclick=()=>{
+    if(!RT.exitArm){
+      RT.exitArm=true;
+      document.getElementById("roX").textContent="exit?";
+      setTimeout(()=>{ RT.exitArm=false; const x=document.getElementById("roX"); if(x) x.textContent="✕"; },2000);
+      return;
+    }
+    document.getElementById("roX").textContent="✕";
+    closeRun();
+  };
+  document.getElementById("roPause").onclick=()=>{
+    RT.run=!RT.run; RT.last=Date.now();
+    const b=document.getElementById("roPause");
+    b.textContent=RT.run?"PAUSE":"RESUME";
+    b.classList.toggle("paused",!RT.run);
+  };
+  document.getElementById("roBack").onclick=()=>jumpSeg(-1);
+  document.getElementById("roFwd").onclick=()=>jumpSeg(1);
+  document.getElementById("roSnd").onclick=()=>{
+    RT.snd=!RT.snd;
+    document.getElementById("roSnd").classList.toggle("off",!RT.snd);
+    if(!RT.snd){ try{speechSynthesis.cancel();}catch(e){} }
+  };
+  document.addEventListener("visibilitychange",()=>{
+    if(!document.hidden && document.getElementById("runOv").classList.contains("open")){
+      try{ if(navigator.wakeLock && !RT.wl) navigator.wakeLock.request("screen").then(w=>RT.wl=w).catch(()=>{}); }catch(e){}
+    }
+  });
+}
+setupRun();
+
+/* ================= EXPORT ================= */
+function showExport(){
+  let m=document.getElementById("exportModal");
+  if(!m){
+    m=document.createElement("div");
+    m.id="exportModal"; m.className="export-modal";
+    m.innerHTML='<div class="proc-head"><span class="proc-id">EXPORT LOG</span></div>'+
+      '<textarea class="export-ta" id="exportTa" readonly></textarea>'+
+      '<div class="export-row">'+
+      '<button id="exportCopy" class="primary">Copy All</button>'+
+      '<button id="exportClose">Close</button></div>';
+    document.body.appendChild(m);
+    document.getElementById("exportClose").onclick=()=>m.classList.remove("open");
+    document.getElementById("exportCopy").onclick=async ()=>{
+      const ta=document.getElementById("exportTa");
+      ta.select(); ta.setSelectionRange(0,999999);
+      try{ await navigator.clipboard.writeText(ta.value);
+        document.getElementById("exportCopy").textContent="Copied ✓";
+        setTimeout(()=>{document.getElementById("exportCopy").textContent="Copy All";},1500);
+      }catch(e){ document.execCommand("copy"); }
+    };
+  }
+  const payload={
+    exported:new Date().toISOString(),
+    app:"training-tracker",
+    cycle:{week:S.week, runsThisWeek:S.runsThisWeek, cycleIdx:S.cycleIdx, cycleDone:S.cycleDone},
+    history:HIST
+  };
+  document.getElementById("exportTa").value=JSON.stringify(payload,null,1);
+  m.classList.add("open");
+}
+
+/* ================= COACH ================= */
+let COACH_TURNS = [];   // rolling conversation for the coach
+let TTS_ON = true;
+let REC = null, LISTENING = false;
+
+function coachContext(){
+  const sess = SESSIONS[S.tab];
+  let checked=[], logged=[];
+  sess.phases.forEach(ph=>ph.items.forEach(it=>{
+    if(S.checks[S.tab+"."+it.id]) checked.push(it.name);
+    if(it.lift){
+      const sets=liftSets(S.tab,it).map(s=>s.w+"x"+s.r).join(", ");
+      logged.push(it.name+": "+sets);
+    }
+  }));
+  const recent = HIST.slice(-4).map(r=>{
+    let s=r.name+" on "+new Date(r.d).toLocaleDateString();
+    if(r.lifts) s+=" ("+Object.entries(r.lifts).map(([n,st])=>n+" "+st.map(x=>x.w+"x"+x.r).join(",")).join("; ")+")";
+    if(r.week) s+=" C25K wk"+r.week;
+    return s;
+  }).join(" | ") || "none yet";
+  return "You are a terse, knowledgeable gym coach speaking to Eric mid-workout through text-to-speech. "+
+    "His program combines Couch-to-5K running, Knee Ability Zero (Ben Patrick), Low Back Ability (Brendan Backstrom), and machine/DB lifting. "+
+    "Core rules of the program: pain-free range first, then reps, then load; small increments; sharp pain or spasm means stop that movement and regress; mild burn is fine; flare-ups are data. "+
+    "CURRENT SESSION: "+sess.name+" ("+sess.code+"). "+
+    "Completed so far: "+(checked.join(", ")||"nothing yet")+". "+
+    "Current logged weights: "+(logged.join(" | ")||"n/a")+". "+
+    "C25K week "+S.week+", runs done this week "+S.runsThisWeek+"/3. Prescription: "+C25K[S.week]+". "+
+    "Recent history: "+recent+". "+
+    "RESPONSE STYLE: 1-3 short spoken-style sentences. Be direct and specific with numbers. "+
+    "If he reports sharp pain, numbness, or shooting sensation: tell him to stop that exercise now, regress, and if it persists see a professional. Never diagnose. "+
+    "You cannot edit his log; if he wants something logged, tell him which set stepper to adjust.";
+}
+
+function addMsg(kind, text){
+  const box=document.getElementById("coachMsgs");
+  const d=document.createElement("div");
+  d.className="cmsg "+kind;
+  d.textContent=text;
+  box.appendChild(d);
+  box.scrollTop=box.scrollHeight;
+  return d;
+}
+
+function speak(text){
+  if(!TTS_ON) return;
+  try{
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);
+    u.rate=1.02;
+    speechSynthesis.speak(u);
+  }catch(e){ /* TTS unavailable */ }
+}
+
+function coachKey(){ try{ return localStorage.getItem("tt-api-key")||""; }catch(e){ return ""; } }
+
+function setupKey(){
+  const cur=coachKey();
+  const masked=cur? cur.slice(0,10)+"…"+cur.slice(-4) : "none set";
+  const entered=prompt("Anthropic API key (stored only on this device).\nCurrent: "+masked+"\n\nPaste key, or leave empty to keep current. Type CLEAR to remove.");
+  if(entered===null) return;
+  const v=entered.trim();
+  if(!v) return;
+  if(v.toUpperCase()==="CLEAR"){ try{localStorage.removeItem("tt-api-key");}catch(e){} addMsg("sys","Key removed."); return; }
+  if(!v.startsWith("sk-ant-")){ addMsg("sys","That doesn't look like an Anthropic key (should start with sk-ant-). Not saved."); return; }
+  try{ localStorage.setItem("tt-api-key", v); addMsg("sys","Key saved on this device. Coach is live."); }
+  catch(e){ addMsg("sys","Couldn't save the key."); }
+}
+
+async function askCoach(text){
+  addMsg("user", text);
+  COACH_TURNS.push({role:"user", content: text});
+  if(COACH_TURNS.length>8) COACH_TURNS=COACH_TURNS.slice(-8);
+  const key=coachKey();
+  if(!key){
+    addMsg("sys","Coach needs an API key. Tap ⚙ above, paste your key from console.anthropic.com. It stays on this device.");
+    return;
+  }
+  const thinking=addMsg("sys","...");
+  try{
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "x-api-key": key,
+        "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-access":"true"
+      },
+      body:JSON.stringify({
+        model:"claude-sonnet-4-6",
+        max_tokens:1000,
+        system: coachContext(),
+        messages: COACH_TURNS
+      })
+    });
+    const data = await response.json();
+    thinking.remove();
+    if(data.error){
+      addMsg("sys","API error: "+(data.error.message||data.error.type)+(response.status===401?" — check your key in ⚙.":""));
+      return;
+    }
+    const reply = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").trim();
+    if(!reply){ addMsg("sys","No response — check connection."); return; }
+    COACH_TURNS.push({role:"assistant", content: reply});
+    addMsg("coach", reply);
+    speak(reply);
+  }catch(err){
+    thinking.remove();
+    addMsg("sys","Coach unreachable — likely no signal. Try again.");
+  }
+}
+
+function setupMic(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const mic=document.getElementById("micBtn");
+  if(!SR){
+    mic.style.display="none";
+    addMsg("sys","Mic not supported in this view — type instead. Responses are still spoken aloud.");
+    return;
+  }
+  REC = new SR();
+  REC.lang="en-US";
+  REC.interimResults=true;
+  REC.continuous=false;
+  let interim="";
+  REC.onresult=(e)=>{
+    interim="";
+    let final="";
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      if(e.results[i].isFinal) final+=e.results[i][0].transcript;
+      else interim+=e.results[i][0].transcript;
+    }
+    document.getElementById("coachInput").placeholder = interim || "listening...";
+    if(final.trim()){ askCoach(final.trim()); }
+  };
+  REC.onend=()=>{
+    LISTENING=false;
+    mic.classList.remove("live");
+    document.getElementById("coachInput").placeholder="or type here...";
+  };
+  REC.onerror=(e)=>{
+    LISTENING=false;
+    mic.classList.remove("live");
+    if(e.error==="not-allowed") addMsg("sys","Mic permission blocked here — use the text box. Responses still speak aloud.");
+  };
+  mic.onclick=()=>{
+    if(LISTENING){ REC.stop(); return; }
+    try{
+      speechSynthesis.cancel();
+      REC.start(); LISTENING=true; mic.classList.add("live");
+      document.getElementById("coachInput").placeholder="listening...";
+    }catch(e){ /* already started */ }
+  };
+}
+
+function setupCoach(){
+  document.getElementById("keyBtn").onclick=setupKey;
+  document.getElementById("coachOpen").onclick=()=>{
+    document.getElementById("coachPanel").classList.add("open");
+  };
+  document.getElementById("coachClose").onclick=()=>{
+    document.getElementById("coachPanel").classList.remove("open");
+    if(LISTENING && REC) REC.stop();
+    speechSynthesis.cancel();
+  };
+  document.getElementById("ttsBtn").onclick=()=>{
+    TTS_ON=!TTS_ON;
+    document.getElementById("ttsBtn").classList.toggle("off",!TTS_ON);
+    if(!TTS_ON) speechSynthesis.cancel();
+  };
+  const send=()=>{
+    const inp=document.getElementById("coachInput");
+    const t=inp.value.trim();
+    if(!t) return;
+    inp.value="";
+    askCoach(t);
+  };
+  document.getElementById("coachSend").onclick=send;
+  document.getElementById("coachInput").addEventListener("keydown",(e)=>{ if(e.key==="Enter") send(); });
+  setupMic();
+}
+setupCoach();
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("./sw.js").catch(()=>{});
+  });
+}
+
+loadState();
+</script>
+</body>
+</html>
