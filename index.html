@@ -208,6 +208,8 @@
     border:1px solid var(--teal); background:none; color:var(--teal); border-radius:8px;
     padding:0 14px; font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:.72rem; cursor:pointer;
   }
+  .hnotes-edit{margin-top:10px; padding-top:8px; border-top:1px dashed var(--line);}
+  .hnotes-edit .np-line span b{color:var(--dim); font-style:normal; font-weight:600;}
 
   /* ---------- run timer ---------- */
   .rc-start{
@@ -939,6 +941,46 @@ function renderHistory(){
           saveHistory(); render();
         };
       });
+      // notes editing: list every note with delete, plus add
+      const nl=document.createElement("div");
+      nl.className="hnotes-edit";
+      let nlh='<div class="np-title">NOTES ON THIS RECORD</div>';
+      if(rec.notes){
+        Object.entries(rec.notes).forEach(([name,nts])=>{
+          nts.forEach((n,ni)=>{
+            nlh+='<div class="np-line"><span><b>'+name+':</b> '+n+'</span><button class="np-x" data-nn="'+name+'" data-ni="'+ni+'">✕</button></div>';
+          });
+        });
+      }
+      (rec.snote||[]).forEach((n,ni)=>{
+        nlh+='<div class="np-line"><span>'+n+'</span><button class="np-x" data-sn="'+ni+'">✕</button></div>';
+      });
+      nlh+='<div class="np-add"><input class="np-input" placeholder="Add a note to this session..." maxlength="120">'+
+           '<button class="np-btn" data-addnote="1">ADD</button></div>';
+      nl.innerHTML=nlh;
+      div.appendChild(nl);
+      const addRecNote=()=>{
+        const inp=nl.querySelector(".np-input");
+        const t=inp.value.trim();
+        if(!t) return;
+        if(!rec.snote) rec.snote=[];
+        rec.snote.push(t);
+        HDELARM=false; saveHistory(); render();
+      };
+      nl.querySelector("[data-addnote]").onclick=addRecNote;
+      nl.querySelector(".np-input").addEventListener("keydown",e=>{ if(e.key==="Enter") addRecNote(); });
+      nl.querySelectorAll(".np-x").forEach(b=>{
+        b.onclick=()=>{
+          if(b.dataset.sn!==undefined){ rec.snote.splice(+b.dataset.sn,1); if(!rec.snote.length) delete rec.snote; }
+          else{
+            rec.notes[b.dataset.nn].splice(+b.dataset.ni,1);
+            if(!rec.notes[b.dataset.nn].length) delete rec.notes[b.dataset.nn];
+            if(!Object.keys(rec.notes).length) delete rec.notes;
+          }
+          HDELARM=false; saveHistory(); render();
+        };
+      });
+
       div.querySelector("#hDone").onclick=()=>{ HEDIT=null; HDELARM=false; saveHistory(); render(); toast("RECORD UPDATED"); };
       div.querySelector("#hDel").onclick=()=>{
         if(!HDELARM){ HDELARM=true; render(); return; }
