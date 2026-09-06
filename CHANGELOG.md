@@ -2,6 +2,13 @@
 
 Version shows in the app header (BUILD vX.Y.Z). The sw.js cache name is locked to the version (tt-vX.Y.Z), so every version bump forces installed phones onto the new build. Commit convention: "vX.Y.Z: summary".
 
+## 0.9.3
+- Triceps superset converted to a tracked lift (DB Skullcrusher, 3 sets with steppers) so its history, blurb, and seeding connect; band extension noted in the sub
+- Refreshed four stale August-dated lift sub-texts to durable progression phrasing (chest press, fly, lateral raise, leg extension)
+
+## 0.9.2
+- Set steppers now initialize from the most recent history entry for that lift instead of baked-in defaults (falls back to defaults only when the lift has no history)
+
 ## 0.9.1
 - Tap zones split on checklist items: the GO square marks complete, tapping the row body opens details (lift logger, or a note panel on non-lift items) so notes can be added before finishing
 - Every non-lift exercise now has its own add-note button

@@ -520,7 +520,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION="0.9.1";
+const APP_VERSION="0.9.3";
 /* ================= DATA ================= */
 const C25K = {
  1:"8 rounds: 60s jog / 90s walk",
@@ -546,11 +546,11 @@ const SESSIONS = {
   note:"Main lifts, then LBA upper back, then stretch block.",
   phases:[
    {label:"Main Lifts", items:[
-     {id:"chestpress", name:"Chest Press", lift:true, sets:3, defW:100, defR:8, sub:"Warm-up 50x10 first. Add 5-10 lb when all sets hit 8 clean."},
+     {id:"chestpress", name:"Chest Press", lift:true, sets:3, defW:100, defR:8, sub:"Warm-up 50x10 first. Top of rep range on all sets = add 5-10 lb."},
      {id:"shoulderpress", name:"Shoulder Press", lift:true, sets:3, defW:70, defR:8, sub:"Ramp: 50x8 warm-up. Back stays comfortable."},
-     {id:"fly", name:"Machine Chest Fly", lift:true, sets:3, defW:75, defR:12, sub:"Warm-up 31x12. Last set hit 17 — ready to bump."},
-     {id:"latraise", name:"DB Seated Lateral Raise", lift:true, sets:3, defW:10, defR:15, sub:"Add reps first, then 12s."},
-     {id:"tris", name:"Triceps Superset x3", sub:"Skullcrusher 15 lb x12-15 + banded extension x15", target:"3 rounds"}
+     {id:"fly", name:"Machine Chest Fly", lift:true, sets:3, defW:75, defR:12, sub:"Warm-up 31x12. Top of range clean on all sets = next pin."},
+     {id:"latraise", name:"DB Seated Lateral Raise", lift:true, sets:3, defW:10, defR:15, sub:"Reps to 15 first, then the next dumbbell up."},
+     {id:"tris", name:"DB Skullcrusher", sub:"Superset each round with banded extension x15. 3 rounds.", lift:true, sets:3, defW:15, defR:12}
    ]},
    {label:"Stretch Block (5-8 min)", items:[
      {id:"s1", name:"Doorway chest stretch", target:"45s"},
@@ -595,7 +595,7 @@ const SESSIONS = {
    {label:"Main Lifts", items:[
      {id:"legpress", name:"Leg Press", lift:true, sets:3, defW:208, defR:10, sub:"3x10 clean, then 220-230."},
      {id:"hamcurl", name:"Hamstring Curl", lift:true, sets:3, defW:77, defR:10, sub:"Add 3rd set, then weight."},
-     {id:"legext", name:"Leg Extension", lift:true, sets:3, defW:66, defR:8, sub:"66x5 felt strong — work up to 66x8."},
+     {id:"legext", name:"Leg Extension", lift:true, sets:3, defW:66, defR:8, sub:"Work up to clean sets of 8 before adding weight."},
      {id:"lpcalf", name:"Leg Press Calf Raise", lift:true, sets:2, defW:100, defR:12, sub:"Full stretch at bottom, 1s pause. Replaces standing machine."}
    ]},
    {label:"Stretch Block (5-8 min)", items:[
@@ -775,7 +775,19 @@ function showImport(firstRun){
 function liftSets(tab,item){
   const k=tab+"."+item.id;
   if(!S.lifts[k]){
-    S.lifts[k]=Array.from({length:item.sets},()=>({w:item.defW,r:item.defR}));
+    // seed from the most recent history entry for this lift; fall back to baked-in defaults
+    let seed=null;
+    for(let i=HIST.length-1;i>=0;i--){
+      if(HIST[i].lifts && HIST[i].lifts[item.name]){ seed=HIST[i].lifts[item.name]; break; }
+    }
+    if(seed && seed.length){
+      S.lifts[k]=Array.from({length:item.sets},(_,si)=>{
+        const s=seed[Math.min(si,seed.length-1)];
+        return {w:s.w, r:s.r};
+      });
+    } else {
+      S.lifts[k]=Array.from({length:item.sets},()=>({w:item.defW,r:item.defR}));
+    }
   }
   // pad if sets increased
   while(S.lifts[k].length<item.sets) S.lifts[k].push({w:item.defW,r:item.defR});
