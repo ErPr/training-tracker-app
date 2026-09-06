@@ -132,6 +132,35 @@
     border-radius:6px; padding:5px 8px; cursor:pointer; vertical-align:middle; margin-right:2px;
   }
   .livebtn.on{border-color:var(--amber); color:var(--amber); background:rgba(230,167,86,.08);}
+
+  /* ---------- floating stopwatch ---------- */
+  .swbtn{
+    position:absolute; top:14px; right:14px;
+    background:none; border:1px solid var(--line); color:var(--dim);
+    border-radius:8px; padding:6px 9px; font-size:.85rem; cursor:pointer;
+  }
+  .swbtn.on{border-color:var(--teal); color:var(--teal);}
+  .sw{
+    position:fixed; z-index:200; left:12px; top:120px;
+    background:rgba(16,20,26,.94); border:1px solid var(--teal); border-radius:14px;
+    padding:8px 10px; display:flex; align-items:center; gap:8px;
+    touch-action:none; user-select:none; -webkit-user-select:none;
+    box-shadow:0 4px 18px rgba(0,0,0,.5);
+  }
+  .sw.hidden{display:none;}
+  .sw-time{
+    font-family:'JetBrains Mono',monospace; font-weight:700; font-size:1.25rem;
+    color:var(--text); min-width:86px; text-align:center; font-variant-numeric:tabular-nums;
+  }
+  .sw-time.live{color:var(--teal);}
+  .sw button{
+    width:38px; height:38px; border-radius:50%; border:1px solid var(--line);
+    background:var(--panel); color:var(--text); font-size:.95rem; cursor:pointer;
+    touch-action:manipulation;
+  }
+  .sw button.swgo{border-color:var(--teal); color:var(--teal);}
+  .sw button.swgo.running{border-color:var(--amber); color:var(--amber);}
+  .sw-x{border:none !important; background:none !important; color:var(--faint) !important; width:24px !important;}
   .hrec-note{color:var(--faint); font-size:.7rem; font-style:italic; margin-top:2px;}
   .hrec-note::before{content:"✎ ";}
 
@@ -348,6 +377,7 @@
 <body>
 
 <header>
+  <button class="swbtn" id="swToggle" aria-label="Show or hide stopwatch">⏱</button>
   <div class="hdr-eyebrow">Integrated Training // KAZ + LBA + C25K + Lifts</div>
   <h1>TRAINING PROCEDURES</h1>
   <div class="hdr-sub">Range before load. Never through sharp pain. Long game.</div>
@@ -383,6 +413,13 @@
     <button class="coachbtn" id="coachOpen">COACH</button>
     <button class="gobtn" id="goBtn" style="flex:1;">Stamp Session Complete</button>
   </div>
+</div>
+
+<div class="sw hidden" id="swWrap" role="timer" aria-label="Stopwatch">
+  <span class="sw-time" id="swTime">00:00.0</span>
+  <button class="swgo" id="swGo" aria-label="Start or pause stopwatch">▶</button>
+  <button id="swReset" aria-label="Reset stopwatch">↺</button>
+  <button class="sw-x" id="swHide" aria-label="Hide stopwatch">✕</button>
 </div>
 
 <div class="run-overlay" id="runOv">
@@ -608,6 +645,7 @@ async function loadState(){
   const nxt = SEQ[Math.min(S.cycleIdx,6)];
   if(nxt && nxt.tab) S.tab = nxt.tab;
   render();
+  setupStopwatch();
   if(!hasState) showImport(true);
 }
 async function saveHistory(){
@@ -1143,6 +1181,97 @@ document.getElementById("goBtn").onclick=()=>{
 
 document.getElementById("wkUp").onclick=()=>{ if(S.week<9){S.week++; S.runsThisWeek=0; saveState(); render();} };
 document.getElementById("wkDown").onclick=()=>{ if(S.week>1){S.week--; S.runsThisWeek=0; saveState(); render();} };
+
+/* ================= STOPWATCH ================= */
+let SW={acc:0, startTs:null, int:null};
+
+function swElapsed(){ return SW.acc + (SW.startTs? Date.now()-SW.startTs : 0); }
+function swFmt(ms){
+  const t=Math.max(0,ms), m=Math.floor(t/60000), s=Math.floor(t%60000/1000), d=Math.floor(t%1000/100);
+  return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0")+"."+d;
+}
+function swPaint(){
+  const el=document.getElementById("swTime");
+  el.textContent=swFmt(swElapsed());
+  el.classList.toggle("live", !!SW.startTs);
+  const go=document.getElementById("swGo");
+  go.textContent=SW.startTs? "⏸" : "▶";
+  go.classList.toggle("running", !!SW.startTs);
+}
+function swPersist(){
+  S.sw={acc:SW.acc, startTs:SW.startTs, shown:!document.getElementById("swWrap").classList.contains("hidden")};
+  saveState();
+}
+function swTickCtl(){
+  if(SW.startTs && !SW.int) SW.int=setInterval(swPaint,100);
+  if(!SW.startTs && SW.int){ clearInterval(SW.int); SW.int=null; }
+}
+function setupStopwatch(){
+  const wrap=document.getElementById("swWrap");
+  const tog=document.getElementById("swToggle");
+
+  // restore persisted state
+  if(S.sw){
+    SW.acc=S.sw.acc||0;
+    SW.startTs=S.sw.startTs||null;
+    if(S.sw.shown) wrap.classList.remove("hidden");
+  }
+  if(S.swPos){
+    wrap.style.left=Math.max(0,Math.min(S.swPos.x, window.innerWidth-160))+"px";
+    wrap.style.top=Math.max(0,Math.min(S.swPos.y, window.innerHeight-60))+"px";
+  }
+  tog.classList.toggle("on", !wrap.classList.contains("hidden"));
+  swPaint(); swTickCtl();
+
+  tog.onclick=()=>{
+    wrap.classList.toggle("hidden");
+    tog.classList.toggle("on", !wrap.classList.contains("hidden"));
+    swPersist();
+  };
+  document.getElementById("swHide").onclick=(e)=>{
+    e.stopPropagation();
+    wrap.classList.add("hidden");
+    tog.classList.remove("on");
+    swPersist();
+  };
+  document.getElementById("swGo").onclick=(e)=>{
+    e.stopPropagation();
+    if(SW.startTs){ SW.acc+=Date.now()-SW.startTs; SW.startTs=null; }
+    else SW.startTs=Date.now();
+    swPaint(); swTickCtl(); swPersist();
+  };
+  document.getElementById("swReset").onclick=(e)=>{
+    e.stopPropagation();
+    SW.acc=0; if(SW.startTs) SW.startTs=Date.now();
+    swPaint(); swPersist();
+  };
+
+  // drag — pointer events with a small threshold so button taps don't drag
+  let drag=null;
+  wrap.addEventListener("pointerdown",(e)=>{
+    if(e.target.tagName==="BUTTON") return;
+    drag={sx:e.clientX, sy:e.clientY, ox:wrap.offsetLeft, oy:wrap.offsetTop, live:false};
+    wrap.setPointerCapture(e.pointerId);
+  });
+  wrap.addEventListener("pointermove",(e)=>{
+    if(!drag) return;
+    const dx=e.clientX-drag.sx, dy=e.clientY-drag.sy;
+    if(!drag.live && Math.hypot(dx,dy)<6) return;
+    drag.live=true;
+    const x=Math.max(0,Math.min(drag.ox+dx, window.innerWidth-wrap.offsetWidth));
+    const y=Math.max(0,Math.min(drag.oy+dy, window.innerHeight-wrap.offsetHeight));
+    wrap.style.left=x+"px"; wrap.style.top=y+"px";
+  });
+  const endDrag=()=>{
+    if(drag && drag.live){
+      S.swPos={x:wrap.offsetLeft, y:wrap.offsetTop};
+      saveState();
+    }
+    drag=null;
+  };
+  wrap.addEventListener("pointerup",endDrag);
+  wrap.addEventListener("pointercancel",endDrag);
+}
 
 /* ================= RUN TIMER ================= */
 let RT={segs:[],i:0,rem:0,run:false,int:null,last:0,snd:true,wl:null,exitArm:false};

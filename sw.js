@@ -1,5 +1,5 @@
 // Training Tracker service worker — cache-first app shell, network for API calls.
-const CACHE = "tt-lab-3";
+const CACHE = "tt-lab-4";
 const SHELL = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
