@@ -117,6 +117,23 @@
   .hval.reps{color:var(--teal);}
   .hactions{display:flex; gap:8px; margin-top:10px; justify-content:flex-end;}
   .hrec.flash{border-color:var(--amber); box-shadow:0 0 0 1px var(--amber); transition:border-color .4s, box-shadow .4s;}
+  .tgtchip{
+    display:inline-block; margin:4px 0 0; padding:3px 8px; border-radius:6px;
+    border:1px dashed var(--amber); color:var(--amber); background:rgba(230,167,86,.07);
+    font-family:'JetBrains Mono',monospace; font-size:.62rem; letter-spacing:.05em; cursor:pointer;
+  }
+  .noteline{
+    margin-top:3px; color:var(--faint); font-size:.7rem; font-style:italic; line-height:1.35;
+  }
+  .noteline::before{content:"✎ ";}
+  .livebtn{
+    background:none; border:1px solid var(--line); color:var(--dim); font-size:.6rem;
+    font-family:'Chakra Petch',sans-serif; font-weight:700; letter-spacing:.08em;
+    border-radius:6px; padding:5px 8px; cursor:pointer; vertical-align:middle; margin-right:2px;
+  }
+  .livebtn.on{border-color:var(--amber); color:var(--amber); background:rgba(230,167,86,.08);}
+  .hrec-note{color:var(--faint); font-size:.7rem; font-style:italic; margin-top:2px;}
+  .hrec-note::before{content:"✎ ";}
 
   /* ---------- run timer ---------- */
   .rc-start{
@@ -395,6 +412,7 @@
   <div class="coach-head">
     <span class="coach-title">◉ COACH</span>
     <span>
+      <button class="livebtn" id="liveBtn" aria-label="Toggle live logging">LIVE</button>
       <button class="ttsbtn" id="keyBtn" aria-label="API key settings">⚙</button>
       <button class="ttsbtn" id="ttsBtn" aria-label="Toggle spoken responses">🔊</button>
       <button class="closebtn" id="coachClose" aria-label="Close coach">✕</button>
@@ -560,6 +578,10 @@ let S = {
   lifts:{},          // "session.itemid" -> [{w,r}...]
   checks:{},         // per active tab: "tab.itemid" -> true
   lastDone:{},       // tab -> ISO date
+  notes:{},          // "tab.itemid" -> [strings], "tab._session" -> [strings]
+  targets:{},        // lift name -> {w,r} set by coach for next session
+  setCur:{},         // "tab.itemid" -> count of sets logged via coach this session
+  live:true,         // coach can write to the tracker
   memFallback:false
 };
 
@@ -750,8 +772,17 @@ function renderHistory(){
       if(rec.lifts){
         Object.entries(rec.lifts).forEach(([name,sets])=>{
           lines+='<div class="hrec-line"><b>'+name+'</b> '+sets.map(s=>s.w+"×"+s.r).join(", ")+'</div>';
+          if(rec.notes && rec.notes[name]) rec.notes[name].forEach(n=>{ lines+='<div class="hrec-note">'+n+'</div>'; });
         });
       }
+      if(rec.notes){
+        Object.entries(rec.notes).forEach(([name,nts])=>{
+          if(rec.lifts && rec.lifts[name]) return; // already shown under the lift
+          lines+='<div class="hrec-line"><b>'+name+'</b></div>';
+          nts.forEach(n=>{ lines+='<div class="hrec-note">'+n+'</div>'; });
+        });
+      }
+      if(rec.snote) rec.snote.forEach(n=>{ lines+='<div class="hrec-note">'+n+'</div>'; });
       div.innerHTML=top+lines;
     } else {
       if(rec.lifts){
@@ -939,7 +970,10 @@ function renderProc(){
         '<div class="item-row">'+
           '<div class="chk">GO</div>'+
           '<div style="flex:1;"><div class="item-name">'+item.name+'</div>'+
-          (item.sub?'<div class="item-sub">'+item.sub+'</div>':'')+'</div>'+
+          (item.sub?'<div class="item-sub">'+item.sub+'</div>':'')+
+          (S.targets[item.name]?'<span class="tgtchip">TARGET '+S.targets[item.name].w+'×'+S.targets[item.name].r+' · tap to load</span>':'')+
+          ((S.notes[S.tab+"."+item.id]||[]).slice(-2).map(n=>'<div class="noteline">'+n+'</div>').join(''))+
+          '</div>'+
           (item.target?'<span class="item-target">'+item.target+'</span>':'')+
           (item.lift?'<span class="expand-hint">LOG ▾</span>':'')+
         '</div>';
@@ -963,6 +997,17 @@ function renderProc(){
         inner+='</div>';
       }
       div.innerHTML=inner;
+
+      const tc=div.querySelector(".tgtchip");
+      if(tc) tc.onclick=(e)=>{
+        e.stopPropagation();
+        const t=S.targets[item.name];
+        if(!t || !item.lift) return;
+        const sets=liftSets(S.tab,item);
+        sets.forEach(s=>{ s.w=t.w; s.r=t.r; });
+        saveState(); render(); reopen(S.tab,item.id);
+        toast("TARGET LOADED · "+item.name.toUpperCase()+" "+t.w+"×"+t.r);
+      };
 
       const row=div.querySelector(".item-row");
       row.onclick=(e)=>{
@@ -1031,25 +1076,39 @@ function renderGo(){
 }
 
 document.getElementById("goBtn").onclick=()=>{
-  const sess=SESSIONS[S.tab];
-  S.lastDone[S.tab]=new Date().toISOString();
+  const oldTab=S.tab;
+  const sess=SESSIONS[oldTab];
+  S.lastDone[oldTab]=new Date().toISOString();
   // build history record before clearing checks
-  const rec={d:new Date().toISOString(), name:sess.name, tab:S.tab};
+  const rec={d:new Date().toISOString(), name:sess.name, tab:oldTab};
   const liftLog={};
+  const noteLog={};
   sess.phases.forEach(ph=>ph.items.forEach(it=>{
-    if(it.lift && S.checks[S.tab+"."+it.id]){
-      liftLog[it.name]=liftSets(S.tab,it).map(s=>({w:s.w,r:s.r}));
+    if(it.lift && S.checks[oldTab+"."+it.id]){
+      liftLog[it.name]=liftSets(oldTab,it).map(s=>({w:s.w,r:s.r}));
     }
+    const nts=S.notes[oldTab+"."+it.id];
+    if(nts && nts.length) noteLog[it.name]=nts.slice();
   }));
   if(Object.keys(liftLog).length) rec.lifts=liftLog;
+  if(Object.keys(noteLog).length) rec.notes=noteLog;
+  const snotes=S.notes[oldTab+"._session"];
+  if(snotes && snotes.length) rec.snote=snotes.slice();
   if(sess.run){ rec.week=S.week; rec.rx=C25K[S.week]; }
   HIST.push(rec);
   saveHistory();
-  advanceCycle(S.tab);
+  // a stamped lift consumes its coach target
+  Object.keys(liftLog).forEach(n=>{ delete S.targets[n]; });
+  // clear checks, notes, and set cursors for the session just stamped
+  sess.phases.forEach(ph=>ph.items.forEach(it=>{
+    delete S.checks[oldTab+"."+it.id];
+    delete S.notes[oldTab+"."+it.id];
+    delete S.setCur[oldTab+"."+it.id];
+  }));
+  delete S.notes[oldTab+"._session"];
+  advanceCycle(oldTab);
   const nxtStep=SEQ[Math.min(S.cycleIdx,6)];
   if(nxtStep.tab) S.tab=nxtStep.tab;
-  // clear checks for this session
-  sess.phases.forEach(ph=>ph.items.forEach(it=>{ delete S.checks[S.tab+"."+it.id]; }));
   let msg="SESSION STAMPED · "+sess.code;
   if(sess.run){
     S.runsThisWeek++;
@@ -1276,31 +1335,54 @@ let REC = null, LISTENING = false;
 
 function coachContext(){
   const sess = SESSIONS[S.tab];
-  let checked=[], logged=[];
+  let checked=[], logged=[], itemNames=[], noteCtx=[];
   sess.phases.forEach(ph=>ph.items.forEach(it=>{
+    itemNames.push(it.name+(it.lift?" (lift, "+it.sets+" sets)":""));
     if(S.checks[S.tab+"."+it.id]) checked.push(it.name);
     if(it.lift){
       const sets=liftSets(S.tab,it).map(s=>s.w+"x"+s.r).join(", ");
       logged.push(it.name+": "+sets);
     }
+    const nts=S.notes[S.tab+"."+it.id];
+    if(nts && nts.length) noteCtx.push(it.name+": "+nts.join(" / "));
   }));
+  const tgtCtx=Object.entries(S.targets).map(([n,t])=>n+" "+t.w+"x"+t.r).join("; ");
   const recent = HIST.slice(-4).map(r=>{
     let s=r.name+" on "+new Date(r.d).toLocaleDateString();
     if(r.lifts) s+=" ("+Object.entries(r.lifts).map(([n,st])=>n+" "+st.map(x=>x.w+"x"+x.r).join(",")).join("; ")+")";
+    if(r.notes) s+=" [notes: "+Object.entries(r.notes).map(([n,nt])=>n+": "+nt.join("; ")).join(" | ")+"]";
     if(r.week) s+=" C25K wk"+r.week;
     return s;
   }).join(" | ") || "none yet";
-  return "You are a terse, knowledgeable gym coach speaking to Eric mid-workout through text-to-speech. "+
+  let ctx = "You are a terse, knowledgeable gym coach speaking to Eric mid-workout through text-to-speech. "+
     "His program combines Couch-to-5K running, Knee Ability Zero (Ben Patrick), Low Back Ability (Brendan Backstrom), and machine/DB lifting. "+
     "Core rules of the program: pain-free range first, then reps, then load; small increments; sharp pain or spasm means stop that movement and regress; mild burn is fine; flare-ups are data. "+
     "CURRENT SESSION: "+sess.name+" ("+sess.code+"). "+
+    "Items this session: "+itemNames.join("; ")+". "+
     "Completed so far: "+(checked.join(", ")||"nothing yet")+". "+
     "Current logged weights: "+(logged.join(" | ")||"n/a")+". "+
+    (noteCtx.length? "Notes so far this session: "+noteCtx.join(" | ")+". ":"")+
+    (tgtCtx? "Standing targets for next sessions: "+tgtCtx+". ":"")+
     "C25K week "+S.week+", runs done this week "+S.runsThisWeek+"/3. Prescription: "+C25K[S.week]+". "+
     "Recent history: "+recent+". "+
     "RESPONSE STYLE: 1-3 short spoken-style sentences. Be direct and specific with numbers. "+
-    "If he reports sharp pain, numbness, or shooting sensation: tell him to stop that exercise now, regress, and if it persists see a professional. Never diagnose. "+
-    "You cannot edit his log; if he wants something logged, tell him which set stepper to adjust.";
+    "If he reports sharp pain, numbness, or shooting sensation: tell him to stop that exercise now, regress, and if it persists see a professional. Never diagnose. ";
+  if(S.live){
+    ctx += "LIVE MODE — you can write to his tracker. To write, end your reply with one line exactly like: "+
+      "##ACTIONS## {\"log\":[{\"item\":\"Leg Press\",\"w\":208,\"r\":10,\"sets\":1}],\"note\":[{\"item\":\"Leg Press\",\"text\":\"felt good\"}],\"target\":[{\"item\":\"Leg Press\",\"w\":220,\"r\":10}],\"check\":[\"Leg Press\"]} "+
+      "Include only the keys you need; omit the line entirely if there is nothing to write. RULES: "+
+      "log only numbers Eric explicitly stated — never invent, estimate, or assume a weight or rep count. "+
+      "sets means how many sets he did at that weight and reps (default 1). "+
+      "item must be one of this session's item names. "+
+      "Use note for subjective reports worth remembering (felt good, machine issues, pain flags, form cues). Keep notes under 12 words, in his words. "+
+      "Use check when an exercise is finished for the day. "+
+      "Use target to set next session's weight and reps for a lift when you and Eric settle on one. "+
+      "The spoken part of your reply must never mention JSON, actions, or logging mechanics — just confirm naturally, like 'Logged. Two more sets at 208.' "+
+      "One ##ACTIONS## line max, at the very end, valid JSON.";
+  } else {
+    ctx += "You cannot edit his log; if he wants something logged, tell him which set stepper to adjust.";
+  }
+  return ctx;
 }
 
 function addMsg(kind, text){
@@ -1338,6 +1420,73 @@ function setupKey(){
   catch(e){ addMsg("sys","Couldn't save the key."); }
 }
 
+function matchItem(name, liftOnly){
+  if(!name) return null;
+  const norm=s=>s.toLowerCase().replace(/[^a-z0-9 ]/g,"").trim();
+  const q=norm(name); if(!q) return null;
+  const qt=q.split(/\s+/).filter(w=>w.length>2);
+  let best=null, bestScore=0;
+  SESSIONS[S.tab].phases.forEach(ph=>ph.items.forEach(it=>{
+    if(liftOnly && !it.lift) return;
+    const t=norm(it.name), tt=t.split(/\s+/).filter(w=>w.length>2);
+    if(t===q){ best=it; bestScore=1000; return; }
+    if(!qt.length || !tt.length) return;
+    let hits=0;
+    qt.forEach(w=>{ if(tt.some(x=>x===w||x.startsWith(w)||w.startsWith(x))) hits++; });
+    const qCover=hits/qt.length;
+    let tHits=0;
+    tt.forEach(x=>{ if(qt.some(w=>x===w||x.startsWith(w)||w.startsWith(x))) tHits++; });
+    const tCover=tHits/tt.length;
+    let score = qCover>=0.6 ? qCover*10+tCover*5 : 0;
+    if(score && (t.includes(q)||q.includes(t))) score+=3;
+    if(score>bestScore){ bestScore=score; best=it; }
+  }));
+  return bestScore>=6 ? best : null;
+}
+
+function applyActions(a){
+  const done=[];
+  try{
+    (a.log||[]).forEach(entry=>{
+      const it=matchItem(entry.item,true);
+      if(!it) return;
+      if(typeof entry.w!=="number" || typeof entry.r!=="number") return;
+      const k=S.tab+"."+it.id;
+      const sets=liftSets(S.tab,it);
+      const n=Math.max(1,Math.min(entry.sets||1, 6));
+      let cur=S.setCur[k]||0;
+      for(let x=0;x<n;x++){
+        const slot=Math.min(cur, sets.length-1);
+        sets[slot]={w:entry.w, r:entry.r};
+        cur++;
+      }
+      S.setCur[k]=cur;
+      if(cur>=it.sets) S.checks[k]=true;
+      done.push("✎ "+it.name.toUpperCase()+" "+entry.w+"×"+entry.r+(n>1?" ×"+n:""));
+    });
+    (a.note||[]).forEach(entry=>{
+      if(!entry.text) return;
+      const it=matchItem(entry.item);
+      const k=it? S.tab+"."+it.id : S.tab+"._session";
+      if(!S.notes[k]) S.notes[k]=[];
+      S.notes[k].push(String(entry.text).slice(0,120));
+      if(S.notes[k].length>6) S.notes[k]=S.notes[k].slice(-6);
+    });
+    (a.target||[]).forEach(entry=>{
+      const it=matchItem(entry.item,true);
+      if(!it || typeof entry.w!=="number" || typeof entry.r!=="number") return;
+      S.targets[it.name]={w:entry.w, r:entry.r};
+      done.push("◎ NEXT "+it.name.toUpperCase()+" "+entry.w+"×"+entry.r);
+    });
+    (a.check||[]).forEach(name=>{
+      const it=matchItem(name);
+      if(it) S.checks[S.tab+"."+it.id]=true;
+    });
+  }catch(e){ /* partial application is fine */ }
+  saveState(); render();
+  if(done.length) toast(done.join(" · "));
+}
+
 async function askCoach(text){
   addMsg("user", text);
   COACH_TURNS.push({role:"user", content: text});
@@ -1372,9 +1521,21 @@ async function askCoach(text){
     }
     const reply = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").trim();
     if(!reply){ addMsg("sys","No response — check connection."); return; }
-    COACH_TURNS.push({role:"assistant", content: reply});
-    addMsg("coach", reply);
-    speak(reply);
+    let visible=reply, actions=null;
+    const ai=reply.indexOf("##ACTIONS##");
+    if(ai>=0){
+      visible=reply.slice(0,ai).trim();
+      const raw=reply.slice(ai+11).trim();
+      try{
+        const jstart=raw.indexOf("{");
+        if(jstart>=0) actions=JSON.parse(raw.slice(jstart));
+      }catch(e){ /* malformed actions degrade to chat-only */ }
+    }
+    if(!visible) visible="Logged.";
+    COACH_TURNS.push({role:"assistant", content: visible});
+    addMsg("coach", visible);
+    if(actions && S.live) applyActions(actions);
+    speak(visible);
   }catch(err){
     thinking.remove();
     addMsg("sys","Coach unreachable — likely no signal. Try again.");
@@ -1425,6 +1586,15 @@ function setupMic(){
 }
 
 function setupCoach(){
+  const lb=document.getElementById("liveBtn");
+  const paintLive=()=>{ lb.classList.toggle("on",!!S.live); };
+  lb.onclick=()=>{
+    S.live=!S.live; saveState(); paintLive();
+    addMsg("sys", S.live
+      ? "LIVE on — talk your sets and I'll log them, take notes, and set next targets."
+      : "LIVE off — advisory only, your thumbs do the logging.");
+  };
+  paintLive();
   document.getElementById("keyBtn").onclick=setupKey;
   document.getElementById("coachOpen").onclick=()=>{
     document.getElementById("coachPanel").classList.add("open");
