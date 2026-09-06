@@ -177,6 +177,37 @@
   .sw.full .sw-ctl-row{gap:20px;}
   .hrec-note{color:var(--faint); font-size:.7rem; font-style:italic; margin-top:2px;}
   .hrec-note::before{content:"✎ ";}
+  .notebtn{
+    margin-top:8px; background:none; border:1px dashed var(--line); color:var(--dim);
+    border-radius:8px; padding:6px 10px; font-size:.68rem; cursor:pointer;
+    font-family:'JetBrains Mono',monospace; letter-spacing:.04em;
+  }
+  .lastblurb{
+    margin:2px 0 10px; padding:8px 10px; border-radius:8px;
+    background:rgba(45,212,191,.05); border:1px solid rgba(45,212,191,.18);
+    font-family:'JetBrains Mono',monospace; font-size:.72rem; color:var(--text); line-height:1.5;
+  }
+  .lb-tag{color:var(--teal); font-weight:700; letter-spacing:.06em; margin-right:6px;}
+  .lb-note{color:var(--faint); font-style:italic; font-family:'Inter',sans-serif; font-size:.72rem; margin-top:2px;}
+  .lb-note::before{content:"✎ ";}
+  .notespanel{
+    margin-top:14px; border:1px solid var(--line); border-radius:12px;
+    background:var(--panel); padding:12px;
+  }
+  .np-title{font-family:'JetBrains Mono',monospace; font-size:.62rem; letter-spacing:.14em; color:var(--dim); margin-bottom:8px;}
+  .np-line{display:flex; justify-content:space-between; align-items:flex-start; gap:8px; padding:5px 0; border-bottom:1px dashed rgba(58,70,86,.4); font-size:.8rem; font-style:italic; color:var(--text);}
+  .np-line span::before{content:"✎ ";color:var(--faint);}
+  .np-x{background:none; border:none; color:var(--faint); cursor:pointer; font-size:.85rem; padding:0 4px;}
+  .np-add{display:flex; gap:8px; margin-top:10px;}
+  .np-input{
+    flex:1; background:var(--panel2); border:1px solid var(--line); border-radius:8px;
+    color:var(--text); padding:10px; font-size:.8rem; font-family:'Inter',sans-serif;
+  }
+  .np-input:focus{outline:none; border-color:var(--teal);}
+  .np-btn{
+    border:1px solid var(--teal); background:none; color:var(--teal); border-radius:8px;
+    padding:0 14px; font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:.72rem; cursor:pointer;
+  }
 
   /* ---------- run timer ---------- */
   .rc-start{
@@ -661,6 +692,7 @@ async function loadState(){
   // open on whatever's next in the cycle
   const nxt = SEQ[Math.min(S.cycleIdx,6)];
   if(nxt && nxt.tab) S.tab = nxt.tab;
+  if(!S.mig2){ S.checks={}; S.setCur={}; S.mig2=true; saveState(); }
   render();
   setupStopwatch();
   if(!hasState){
@@ -1018,6 +1050,26 @@ function renderTabs(){
   });
 }
 
+function lastLiftInfo(name){
+  for(let i=HIST.length-1;i>=0;i--){
+    const r=HIST[i];
+    if(r.lifts && r.lifts[name]){
+      // compress equal consecutive sets: 208x10 x3
+      const parts=[];
+      r.lifts[name].forEach(s=>{
+        const last=parts[parts.length-1];
+        if(last && last.w===s.w && last.r===s.r) last.n++;
+        else parts.push({w:s.w,r:s.r,n:1});
+      });
+      const sets=parts.map(p=>p.w+"\u00d7"+p.r+(p.n>1?" \u00d7"+p.n:"")).join(", ");
+      const note=(r.notes && r.notes[name] && r.notes[name].length)? r.notes[name][r.notes[name].length-1] : null;
+      const d=new Date(r.d);
+      return {when:(d.getMonth()+1)+"/"+d.getDate(), sets, note};
+    }
+  }
+  return null;
+}
+
 function renderProc(){
   const sess=SESSIONS[S.tab];
   const el=document.getElementById("proc");
@@ -1070,6 +1122,13 @@ function renderProc(){
       if(item.lift){
         const sets=liftSets(S.tab,item);
         inner+='<div class="logger">';
+        const last=lastLiftInfo(item.name);
+        if(last){
+          inner+='<div class="lastblurb"><span class="lb-tag">LAST '+last.when+'</span> '+last.sets+
+            (last.note?'<div class="lb-note">'+last.note+'</div>':'')+'</div>';
+        } else {
+          inner+='<div class="lastblurb"><span class="lb-tag">FIRST LOG</span> no history for this one yet — find a clean 10-rep weight with 2-3 in reserve</div>';
+        }
         sets.forEach((st,i)=>{
           inner+='<div class="logrow"><span class="setlbl">S'+(i+1)+'</span>'+
             '<div class="numfield">'+
@@ -1083,9 +1142,21 @@ function renderProc(){
               '<button class="numbtn" data-act="r+" data-set="'+i+'">+</button>'+
             '</div></div>';
         });
+        inner+='<button class="notebtn" data-note="1">✎ add note</button>';
         inner+='</div>';
       }
       div.innerHTML=inner;
+
+      const nb=div.querySelector(".notebtn");
+      if(nb) nb.onclick=(e)=>{
+        e.stopPropagation();
+        const t=prompt("Note for "+item.name+":");
+        if(t===null || !t.trim()) return;
+        const k=S.tab+"."+item.id;
+        if(!S.notes[k]) S.notes[k]=[];
+        S.notes[k].push(t.trim().slice(0,120));
+        saveState(); render(); reopen(S.tab,item.id);
+      };
 
       const tc=div.querySelector(".tgtchip");
       if(tc) tc.onclick=(e)=>{
@@ -1127,6 +1198,37 @@ function renderProc(){
       }
       el.appendChild(div);
     });
+  });
+
+  // session notes panel
+  const np=document.createElement("div");
+  np.className="notespanel";
+  const snotes=S.notes[S.tab+"._session"]||[];
+  let nh='<div class="np-title">SESSION NOTES</div>';
+  snotes.forEach((n,i)=>{
+    nh+='<div class="np-line"><span>'+n+'</span><button class="np-x" data-i="'+i+'">✕</button></div>';
+  });
+  nh+='<div class="np-add"><input class="np-input" id="npInput" placeholder="How did it go? Anything to remember?" maxlength="120">'+
+      '<button class="np-btn" id="npAdd">ADD</button></div>';
+  np.innerHTML=nh;
+  el.appendChild(np);
+  const addNote=()=>{
+    const inp=document.getElementById("npInput");
+    const t=inp.value.trim();
+    if(!t) return;
+    const k=S.tab+"._session";
+    if(!S.notes[k]) S.notes[k]=[];
+    S.notes[k].push(t);
+    saveState(); render();
+  };
+  np.querySelector("#npAdd").onclick=addNote;
+  np.querySelector("#npInput").addEventListener("keydown",e=>{ if(e.key==="Enter") addNote(); });
+  np.querySelectorAll(".np-x").forEach(b=>{
+    b.onclick=()=>{
+      const k=S.tab+"._session";
+      S.notes[k].splice(+b.dataset.i,1);
+      saveState(); render();
+    };
   });
 }
 
