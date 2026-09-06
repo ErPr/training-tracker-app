@@ -651,6 +651,11 @@ function showImport(firstRun){
           else if(typeof p.cycle.seqPos==="number") S.cycleIdx=p.cycle.seqPos;
           if(Array.isArray(p.cycle.cycleDone)) S.cycleDone=p.cycle.cycleDone;
         }
+        if(p.targets && typeof p.targets==="object"){
+          Object.entries(p.targets).forEach(([n,t])=>{
+            if(t && typeof t.w==="number" && typeof t.r==="number") S.targets[n]={w:t.w,r:t.r};
+          });
+        }
         saveHistory(); saveState();
         m.classList.remove("open");
         render();
@@ -1322,6 +1327,7 @@ function showExport(){
     exported:new Date().toISOString(),
     app:"training-tracker",
     cycle:{week:S.week, runsThisWeek:S.runsThisWeek, cycleIdx:S.cycleIdx, cycleDone:S.cycleDone},
+    targets:S.targets,
     history:HIST
   };
   document.getElementById("exportTa").value=JSON.stringify(payload,null,1);
