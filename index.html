@@ -209,6 +209,27 @@
     border:1px solid var(--teal); background:none; color:var(--teal); border-radius:8px;
     padding:0 14px; font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:.72rem; cursor:pointer;
   }
+  .phase{display:flex; justify-content:space-between; align-items:center;}
+  .addmovebtn{
+    background:none; border:1px dashed var(--line); color:var(--dim); border-radius:7px;
+    padding:4px 10px; font-family:'JetBrains Mono',monospace; font-size:.62rem;
+    letter-spacing:.06em; cursor:pointer; text-transform:lowercase;
+  }
+  .movelist{flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:12px 0;}
+  .movebtn{
+    text-align:left; padding:13px 14px; border-radius:10px; border:1px solid var(--line);
+    background:var(--panel); color:var(--text); font-size:.9rem; cursor:pointer;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .movebtn span{color:var(--faint); font-family:'JetBrains Mono',monospace; font-size:.68rem;}
+  .setops{display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;}
+  .setopbtn{
+    background:none; border:1px solid var(--line); color:var(--dim); border-radius:8px;
+    padding:6px 12px; font-size:.72rem; cursor:pointer;
+    font-family:'JetBrains Mono',monospace; letter-spacing:.04em;
+  }
+  .setops .notebtn{margin-top:0;}
+  .rmx{border-color:rgba(224,90,78,.4) !important; color:var(--red) !important;}
   .hnotes-edit{margin-top:10px; padding-top:8px; border-top:1px dashed var(--line);}
   .hnotes-edit .np-line span b{color:var(--dim); font-style:normal; font-weight:600;}
 
@@ -520,7 +541,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION="0.9.4";
+const APP_VERSION="0.9.5";
 /* ================= DATA ================= */
 const C25K = {
  1:"8 rounds: 60s jog / 90s walk",
@@ -671,6 +692,8 @@ let S = {
   notes:{},          // "tab.itemid" -> [strings], "tab._session" -> [strings]
   targets:{},        // lift name -> {w,r} set by coach for next session
   setCur:{},         // "tab.itemid" -> count of sets logged via coach this session
+  extras:{},         // tab -> [added movement items]
+  setOv:{},          // "tab.itemid" -> true when user changed set count in the moment
   live:true,         // coach can write to the tracker
   memFallback:false
 };
@@ -802,8 +825,8 @@ function liftSets(tab,item){
       S.lifts[k]=Array.from({length:item.sets},()=>({w:item.defW,r:item.defR}));
     }
   }
-  // pad if sets increased
-  while(S.lifts[k].length<item.sets) S.lifts[k].push({w:item.defW,r:item.defR});
+  // pad if sets increased (unless the user changed the count on purpose)
+  if(!S.setOv[k]) while(S.lifts[k].length<item.sets) S.lifts[k].push({w:item.defW,r:item.defR});
   return S.lifts[k];
 }
 function fmtDate(iso){
@@ -1128,6 +1151,65 @@ function renderTabs(){
   });
 }
 
+const MOVES=[
+  {name:"Front Squat", defW:95, defR:8},
+  {name:"Back Squat", defW:135, defR:8},
+  {name:"Goblet Squat", defW:35, defR:10},
+  {name:"Romanian Deadlift", defW:95, defR:10},
+  {name:"Bulgarian Split Squat", defW:20, defR:8},
+  {name:"Walking Lunge", defW:20, defR:10},
+  {name:"Hip Thrust", defW:135, defR:10},
+  {name:"Standing Calf Raise", defW:66, defR:12},
+  {name:"Seated Calf Raise", defW:45, defR:12},
+  {name:"Incline DB Press", defW:30, defR:10},
+  {name:"DB Bench Press", defW:35, defR:10},
+  {name:"Cable Row", defW:70, defR:10},
+  {name:"Face Pull", defW:30, defR:15},
+  {name:"Hammer Curl", defW:20, defR:10},
+  {name:"Overhead Triceps Ext", defW:25, defR:12}
+];
+function extrasFor(tab, phIdx){
+  return (S.extras[tab]||[]).filter(x=>x.ph===phIdx);
+}
+function phaseItemsAll(tab){
+  const out=[];
+  SESSIONS[tab].phases.forEach((ph,pi)=>{
+    ph.items.forEach(it=>out.push(it));
+    extrasFor(tab,pi).forEach(x=>out.push(x));
+  });
+  return out;
+}
+function addMovement(phIdx, mv){
+  const slug="x_"+mv.name.toLowerCase().replace(/[^a-z0-9]+/g,"");
+  if(!S.extras[S.tab]) S.extras[S.tab]=[];
+  if(S.extras[S.tab].some(x=>x.id===slug)){ toast("ALREADY ADDED"); return; }
+  S.extras[S.tab].push({id:slug, name:mv.name, sub:"Added movement.", lift:true, sets:3, defW:mv.defW, defR:mv.defR, ph:phIdx, extra:true});
+  saveState(); render();
+  toast("ADDED "+mv.name.toUpperCase());
+}
+function showMovePicker(phIdx){
+  let m=document.getElementById("moveModal");
+  if(m) m.remove();
+  m=document.createElement("div");
+  m.id="moveModal"; m.className="export-modal open";
+  let h='<div class="proc-head"><span class="proc-id">ADD MOVEMENT</span></div><div class="movelist">';
+  MOVES.forEach((mv,i)=>{ h+='<button class="movebtn" data-mv="'+i+'">'+mv.name+' <span>'+mv.defW+'×'+mv.defR+' start</span></button>'; });
+  h+='<button class="movebtn" data-custom="1">Custom…</button></div>'+
+     '<div class="export-row"><button id="moveClose">Cancel</button></div>';
+  m.innerHTML=h;
+  document.body.appendChild(m);
+  m.querySelector("#moveClose").onclick=()=>m.remove();
+  m.querySelectorAll("[data-mv]").forEach(b=>{
+    b.onclick=()=>{ addMovement(phIdx, MOVES[+b.dataset.mv]); m.remove(); };
+  });
+  m.querySelector("[data-custom]").onclick=()=>{
+    const n=prompt("Movement name:");
+    if(n===null||!n.trim()) return;
+    addMovement(phIdx, {name:n.trim().slice(0,40), defW:45, defR:10});
+    m.remove();
+  };
+}
+
 function lastLiftInfo(name){
   for(let i=HIST.length-1;i>=0;i--){
     const r=HIST[i];
@@ -1161,12 +1243,15 @@ function renderProc(){
     '<div class="proc-note">'+sess.note+'</div>';
   el.appendChild(head);
 
-  sess.phases.forEach(ph=>{
+  sess.phases.forEach((ph,phIdx)=>{
     const pl=document.createElement("div");
-    pl.className="phase"; pl.textContent=ph.label;
+    pl.className="phase";
+    const hasLifts=ph.items.some(it=>it.lift)||extrasFor(S.tab,phIdx).length>0;
+    pl.innerHTML='<span>'+ph.label+'</span>'+(hasLifts?'<button class="addmovebtn">+ add</button>':'');
     el.appendChild(pl);
+    if(hasLifts) pl.querySelector(".addmovebtn").onclick=()=>showMovePicker(phIdx);
 
-    ph.items.forEach(item=>{
+    ph.items.concat(extrasFor(S.tab,phIdx)).forEach(item=>{
       const ck = S.checks[S.tab+"."+item.id];
       const div=document.createElement("div");
       div.className="item"+(ck?" done":"");
@@ -1223,12 +1308,38 @@ function renderProc(){
               '<button class="numbtn" data-act="r+" data-set="'+i+'">+</button>'+
             '</div></div>';
         });
-        inner+='<button class="notebtn" data-note="1">✎ add note</button>';
+        inner+='<div class="setops"><button class="setopbtn" data-setop="-">− set</button><button class="setopbtn" data-setop="+">+ set</button>'+
+          '<button class="notebtn" data-note="1">✎ add note</button>'+
+          (item.extra?'<button class="notebtn rmx" data-rmx="1">✕ remove movement</button>':'')+'</div>';
         inner+='</div>';
       }
       div.innerHTML=inner;
 
-      const nb=div.querySelector(".notebtn");
+      div.querySelectorAll(".setopbtn").forEach(sb=>{
+        sb.onclick=(e)=>{
+          e.stopPropagation();
+          const k=S.tab+"."+item.id;
+          const sets=liftSets(S.tab,item);
+          if(sb.dataset.setop==="+"){
+            const lastSet=sets[sets.length-1]||{w:item.defW,r:item.defR};
+            sets.push({w:lastSet.w, r:lastSet.r});
+          } else {
+            if(sets.length<=1){ toast("AT LEAST ONE SET"); return; }
+            sets.pop();
+          }
+          S.setOv[k]=true;
+          saveState(); render(); reopen(S.tab,item.id);
+        };
+      });
+      const rx=div.querySelector("[data-rmx]");
+      if(rx) rx.onclick=(e)=>{
+        e.stopPropagation();
+        S.extras[S.tab]=(S.extras[S.tab]||[]).filter(x=>x.id!==item.id);
+        delete S.checks[S.tab+"."+item.id];
+        saveState(); render();
+        toast("REMOVED "+item.name.toUpperCase());
+      };
+      const nb=div.querySelector('.notebtn[data-note]');
       if(nb) nb.onclick=(e)=>{
         e.stopPropagation();
         const t=prompt("Note for "+item.name+":");
@@ -1362,13 +1473,13 @@ document.getElementById("goBtn").onclick=()=>{
   const rec={d:new Date().toISOString(), name:sess.name, tab:oldTab};
   const liftLog={};
   const noteLog={};
-  sess.phases.forEach(ph=>ph.items.forEach(it=>{
+  phaseItemsAll(oldTab).forEach(it=>{
     if(it.lift && S.checks[oldTab+"."+it.id]){
       liftLog[it.name]=liftSets(oldTab,it).map(s=>({w:s.w,r:s.r}));
     }
     const nts=S.notes[oldTab+"."+it.id];
     if(nts && nts.length) noteLog[it.name]=nts.slice();
-  }));
+  });
   if(Object.keys(liftLog).length) rec.lifts=liftLog;
   if(Object.keys(noteLog).length) rec.notes=noteLog;
   const snotes=S.notes[oldTab+"._session"];
@@ -1378,12 +1489,13 @@ document.getElementById("goBtn").onclick=()=>{
   saveHistory();
   // a stamped lift consumes its coach target
   Object.keys(liftLog).forEach(n=>{ delete S.targets[n]; });
-  // clear checks, notes, and set cursors for the session just stamped
-  sess.phases.forEach(ph=>ph.items.forEach(it=>{
+  // clear checks, notes, set cursors, and count overrides for the session just stamped
+  phaseItemsAll(oldTab).forEach(it=>{
     delete S.checks[oldTab+"."+it.id];
     delete S.notes[oldTab+"."+it.id];
     delete S.setCur[oldTab+"."+it.id];
-  }));
+    delete S.setOv[oldTab+"."+it.id];
+  });
   delete S.notes[oldTab+"._session"];
   advanceCycle(oldTab);
   const nxtStep=SEQ[Math.min(S.cycleIdx,6)];
@@ -1833,7 +1945,7 @@ let REC = null, LISTENING = false;
 function coachContext(){
   const sess = SESSIONS[S.tab];
   let checked=[], logged=[], itemNames=[], noteCtx=[];
-  sess.phases.forEach(ph=>ph.items.forEach(it=>{
+  phaseItemsAll(S.tab).forEach(it=>{
     itemNames.push(it.name+(it.lift?" (lift, "+it.sets+" sets)":""));
     if(S.checks[S.tab+"."+it.id]) checked.push(it.name);
     if(it.lift){
@@ -1842,7 +1954,7 @@ function coachContext(){
     }
     const nts=S.notes[S.tab+"."+it.id];
     if(nts && nts.length) noteCtx.push(it.name+": "+nts.join(" / "));
-  }));
+  });
   const tgtCtx=Object.entries(S.targets).map(([n,t])=>n+" "+t.w+"x"+t.r).join("; ");
   const recent = HIST.slice(-4).map(r=>{
     let s=r.name+" on "+new Date(r.d).toLocaleDateString();
@@ -1923,7 +2035,7 @@ function matchItem(name, liftOnly){
   const q=norm(name); if(!q) return null;
   const qt=q.split(/\s+/).filter(w=>w.length>2);
   let best=null, bestScore=0;
-  SESSIONS[S.tab].phases.forEach(ph=>ph.items.forEach(it=>{
+  phaseItemsAll(S.tab).forEach(it=>{
     if(liftOnly && !it.lift) return;
     const t=norm(it.name), tt=t.split(/\s+/).filter(w=>w.length>2);
     if(t===q){ best=it; bestScore=1000; return; }
@@ -1937,7 +2049,7 @@ function matchItem(name, liftOnly){
     let score = qCover>=0.6 ? qCover*10+tCover*5 : 0;
     if(score && (t.includes(q)||q.includes(t))) score+=3;
     if(score>bestScore){ bestScore=score; best=it; }
-  }));
+  });
   return bestScore>=6 ? best : null;
 }
 
