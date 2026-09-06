@@ -1031,10 +1031,17 @@ function renderSeq(){
       }
       else if(step.tab){ S.tab=step.tab; S.view="session"; saveState(); render(); }
       else {
-        if(!S.cycleDone.includes(i)) S.cycleDone.push(i);
-        S.cycleIdx=Math.max(S.cycleIdx,i+1);
-        normalizeCycle();
-        saveState(); render(); toast("REST LOGGED ✓");
+        if(S.cycleDone.includes(i)){
+          // reopen a logged rest: unmark it and pull the cycle pointer back to it
+          S.cycleDone=S.cycleDone.filter(x=>x!==i);
+          S.cycleIdx=Math.min(S.cycleIdx,i);
+          saveState(); render(); toast("REST REOPENED — UP NEXT");
+        } else {
+          if(!S.cycleDone.includes(i)) S.cycleDone.push(i);
+          S.cycleIdx=Math.max(S.cycleIdx,i+1);
+          normalizeCycle();
+          saveState(); render(); toast("REST LOGGED ✓");
+        }
       }
     };
     strip.appendChild(c);
