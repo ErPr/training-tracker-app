@@ -663,11 +663,16 @@ async function loadState(){
   if(nxt && nxt.tab) S.tab = nxt.tab;
   render();
   setupStopwatch();
-  if(!hasState) showImport(true);
+  if(!hasState){
+    const restored = await ghRestore();
+    render();
+    if(!restored) showImport(true);
+  }
 }
 async function saveHistory(){
   try{ localStorage.setItem(HKEY, JSON.stringify(HIST)); }
   catch(e){ toast("LOG SAVE FAILED — session still stamped"); }
+  if(typeof ghSchedule==="function") ghSchedule();
 }
 let saveTimer=null;
 function saveState(){
@@ -774,6 +779,13 @@ function renderHistory(){
   imp.textContent="⇧ Import Log";
   imp.onclick=()=>showImport(false);
   el.appendChild(imp);
+
+  const gh=document.createElement("button");
+  gh.className="exportbtn";
+  gh.id="ghStatus";
+  gh.textContent=ghStatusText();
+  gh.onclick=ghSetup;
+  el.appendChild(gh);
 
   if(HIST.length===0){
     const e=document.createElement("div");
@@ -1474,6 +1486,118 @@ function setupRun(){
 }
 setupRun();
 
+/* ================= GITHUB SYNC ================= */
+let GH={sha:null, timer:null, last:null, err:null, busy:false};
+
+function ghCfg(){
+  try{ return {tok:localStorage.getItem("tt-gh-token")||"", repo:localStorage.getItem("tt-gh-repo")||""}; }
+  catch(e){ return {tok:"",repo:""}; }
+}
+function ghConfigured(){ const c=ghCfg(); return !!(c.tok && c.repo); }
+
+function ghSetup(){
+  const c=ghCfg();
+  const repo=prompt("GitHub repo for log backup (owner/name).\nUse a PRIVATE repo.\nCurrent: "+(c.repo||"none"), c.repo||"");
+  if(repo===null) return;
+  const r=repo.trim();
+  if(r && !/^[\w.-]+\/[\w.-]+$/.test(r)){ toast("REPO SHOULD LOOK LIKE owner/name"); return; }
+  const tok=prompt("Fine-grained token with Contents read/write on that repo ONLY.\nStored only on this device.\nPaste token, leave empty to keep current, or type CLEAR to remove.");
+  try{
+    if(r) localStorage.setItem("tt-gh-repo", r);
+    if(tok!==null){
+      const t=tok.trim();
+      if(t.toUpperCase()==="CLEAR") localStorage.removeItem("tt-gh-token");
+      else if(t) localStorage.setItem("tt-gh-token", t);
+    }
+  }catch(e){}
+  GH.sha=null; GH.err=null;
+  render();
+  if(ghConfigured()){ toast("SYNC ON — PUSHING CURRENT LOG"); ghPushNow("sync setup"); }
+}
+
+function ghPayload(){
+  return JSON.stringify({
+    exported:new Date().toISOString(), app:"training-tracker",
+    cycle:{week:S.week, runsThisWeek:S.runsThisWeek, cycleIdx:S.cycleIdx, cycleDone:S.cycleDone},
+    targets:S.targets, history:HIST
+  }, null, 1);
+}
+function ghSchedule(){
+  if(!ghConfigured()) return;
+  clearTimeout(GH.timer);
+  GH.timer=setTimeout(()=>ghPushNow("auto"), 2500);
+}
+async function ghApi(method, body){
+  const c=ghCfg();
+  return fetch("https://api.github.com/repos/"+c.repo+"/contents/training-log.json", {
+    method,
+    headers:{
+      "Authorization":"Bearer "+c.tok,
+      "Accept":"application/vnd.github+json",
+      ...(body?{"Content-Type":"application/json"}:{})
+    },
+    body: body? JSON.stringify(body) : undefined
+  });
+}
+async function ghPushNow(reason){
+  if(!ghConfigured()) return;
+  if(GH.busy){ ghSchedule(); return; }
+  GH.busy=true;
+  try{
+    if(!GH.sha){
+      const g=await ghApi("GET");
+      if(g.status===200){ GH.sha=(await g.json()).sha; }
+      else if(g.status===401){ ghStatus("token rejected — tap to fix"); GH.busy=false; return; }
+    }
+    const content=btoa(unescape(encodeURIComponent(ghPayload())));
+    const body={message:"training log: "+reason, content};
+    if(GH.sha) body.sha=GH.sha;
+    let r=await ghApi("PUT", body);
+    if(r.status===409 || r.status===422){
+      const g2=await ghApi("GET");
+      if(g2.status===200){ body.sha=(await g2.json()).sha; r=await ghApi("PUT", body); }
+    }
+    if(r.ok){ GH.sha=(await r.json()).content.sha; GH.last=new Date(); ghStatus(null); }
+    else if(r.status===404){ ghStatus("repo not found — create it on github.com, then tap"); }
+    else if(r.status===401){ ghStatus("token rejected — tap to fix"); }
+    else ghStatus("push failed ("+r.status+") — retries on next change");
+  }catch(e){ ghStatus("offline — retries on next change"); }
+  GH.busy=false;
+}
+function ghStatusText(){
+  if(!ghConfigured()) return "☁ backup off — tap to set up GitHub sync";
+  if(GH.err) return "☁ "+GH.err;
+  if(GH.last) return "☁ backed up "+GH.last.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+  return "☁ sync on — pushes on next change";
+}
+function ghStatus(err){
+  GH.err=err;
+  const el=document.getElementById("ghStatus");
+  if(el) el.textContent=ghStatusText();
+}
+async function ghRestore(){
+  if(!ghConfigured()) return false;
+  try{
+    const g=await ghApi("GET");
+    if(g.status!==200) return false;
+    const j=await g.json();
+    GH.sha=j.sha;
+    const p=JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,"")))));
+    if(!Array.isArray(p.history)) return false;
+    HIST=p.history;
+    if(p.cycle){
+      if(p.cycle.week) S.week=p.cycle.week;
+      if(typeof p.cycle.runsThisWeek==="number") S.runsThisWeek=p.cycle.runsThisWeek;
+      if(typeof p.cycle.cycleIdx==="number") S.cycleIdx=p.cycle.cycleIdx;
+      if(Array.isArray(p.cycle.cycleDone)) S.cycleDone=p.cycle.cycleDone;
+    }
+    if(p.targets && typeof p.targets==="object") Object.assign(S.targets, p.targets);
+    saveHistory(); saveState();
+    toast("LOG RESTORED FROM GITHUB · "+HIST.length+" SESSIONS");
+    return true;
+  }catch(e){ return false; }
+}
+
 /* ================= EXPORT ================= */
 function showExport(){
   let m=document.getElementById("exportModal");
@@ -1663,6 +1787,7 @@ function applyActions(a){
     });
   }catch(e){ /* partial application is fine */ }
   saveState(); render();
+  if(typeof ghSchedule==="function") ghSchedule();
   if(done.length) toast(done.join(" · "));
 }
 
