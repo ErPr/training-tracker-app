@@ -520,7 +520,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION="0.9.3";
+const APP_VERSION="0.9.4";
 /* ================= DATA ================= */
 const C25K = {
  1:"8 rounds: 60s jog / 90s walk",
@@ -698,6 +698,19 @@ async function loadState(){
   const nxt = SEQ[Math.min(S.cycleIdx,6)];
   if(nxt && nxt.tab) S.tab = nxt.tab;
   if(!S.mig2){ S.checks={}; S.setCur={}; S.mig2=true; saveState(); }
+  if(!S.mig3){
+    // reseed any lift whose saved steppers are pristine factory defaults;
+    // history-derived values will re-initialize on next render
+    Object.entries(SESSIONS).forEach(([tab,sess])=>{
+      sess.phases.forEach(ph=>ph.items.forEach(it=>{
+        if(!it.lift) return;
+        const k=tab+"."+it.id;
+        const v=S.lifts[k];
+        if(v && v.every(s=>s.w===it.defW && s.r===it.defR)) delete S.lifts[k];
+      }));
+    });
+    S.mig3=true; saveState();
+  }
   document.getElementById("hdrVer").textContent="BUILD v"+APP_VERSION;
   render();
   setupStopwatch();
