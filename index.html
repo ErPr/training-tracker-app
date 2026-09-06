@@ -161,6 +161,20 @@
   .sw button.swgo{border-color:var(--teal); color:var(--teal);}
   .sw button.swgo.running{border-color:var(--amber); color:var(--amber);}
   .sw-x{border:none !important; background:none !important; color:var(--faint) !important; width:24px !important;}
+  .sw.big .sw-time{font-size:2.3rem; min-width:150px;}
+  .sw.big button{width:52px; height:52px; font-size:1.15rem;}
+  .sw.big .sw-x{width:30px !important;}
+  .sw.full{
+    left:0 !important; top:0 !important; right:0; bottom:0;
+    width:100vw; height:100vh; border-radius:0; border:none;
+    flex-direction:column; justify-content:center; gap:6vh;
+    background:rgba(10,13,17,.98);
+  }
+  .sw.full .sw-time{font-size:19vw; min-width:0; line-height:1;}
+  .sw.full button{width:72px; height:72px; font-size:1.5rem;}
+  .sw.full .sw-x{position:absolute; top:16px; right:16px; width:44px !important; font-size:1.3rem;}
+  .sw-ctl-row{display:flex; gap:8px; align-items:center;}
+  .sw.full .sw-ctl-row{gap:20px;}
   .hrec-note{color:var(--faint); font-size:.7rem; font-style:italic; margin-top:2px;}
   .hrec-note::before{content:"✎ ";}
 
@@ -417,9 +431,12 @@
 
 <div class="sw hidden" id="swWrap" role="timer" aria-label="Stopwatch">
   <span class="sw-time" id="swTime">00:00.0</span>
-  <button class="swgo" id="swGo" aria-label="Start or pause stopwatch">▶</button>
-  <button id="swReset" aria-label="Reset stopwatch">↺</button>
-  <button class="sw-x" id="swHide" aria-label="Hide stopwatch">✕</button>
+  <span class="sw-ctl-row">
+    <button class="swgo" id="swGo" aria-label="Start or pause stopwatch">▶</button>
+    <button id="swReset" aria-label="Reset stopwatch">↺</button>
+    <button id="swSize" aria-label="Cycle stopwatch size">⤢</button>
+    <button class="sw-x" id="swHide" aria-label="Hide stopwatch">✕</button>
+  </span>
 </div>
 
 <div class="run-overlay" id="runOv">
@@ -1183,7 +1200,7 @@ document.getElementById("wkUp").onclick=()=>{ if(S.week<9){S.week++; S.runsThisW
 document.getElementById("wkDown").onclick=()=>{ if(S.week>1){S.week--; S.runsThisWeek=0; saveState(); render();} };
 
 /* ================= STOPWATCH ================= */
-let SW={acc:0, startTs:null, int:null};
+let SW={acc:0, startTs:null, int:null, mode:0};
 
 function swElapsed(){ return SW.acc + (SW.startTs? Date.now()-SW.startTs : 0); }
 function swFmt(ms){
@@ -1199,12 +1216,18 @@ function swPaint(){
   go.classList.toggle("running", !!SW.startTs);
 }
 function swPersist(){
-  S.sw={acc:SW.acc, startTs:SW.startTs, shown:!document.getElementById("swWrap").classList.contains("hidden")};
+  S.sw={acc:SW.acc, startTs:SW.startTs, mode:SW.mode, shown:!document.getElementById("swWrap").classList.contains("hidden")};
   saveState();
 }
 function swTickCtl(){
   if(SW.startTs && !SW.int) SW.int=setInterval(swPaint,100);
   if(!SW.startTs && SW.int){ clearInterval(SW.int); SW.int=null; }
+}
+function swApplyMode(){
+  const wrap=document.getElementById("swWrap");
+  wrap.classList.toggle("big", SW.mode===1);
+  wrap.classList.toggle("full", SW.mode===2);
+  document.getElementById("swSize").textContent = SW.mode===2 ? "⤡" : "⤢";
 }
 function setupStopwatch(){
   const wrap=document.getElementById("swWrap");
@@ -1214,8 +1237,10 @@ function setupStopwatch(){
   if(S.sw){
     SW.acc=S.sw.acc||0;
     SW.startTs=S.sw.startTs||null;
+    SW.mode=S.sw.mode||0;
     if(S.sw.shown) wrap.classList.remove("hidden");
   }
+  swApplyMode();
   if(S.swPos){
     wrap.style.left=Math.max(0,Math.min(S.swPos.x, window.innerWidth-160))+"px";
     wrap.style.top=Math.max(0,Math.min(S.swPos.y, window.innerHeight-60))+"px";
@@ -1240,6 +1265,11 @@ function setupStopwatch(){
     else SW.startTs=Date.now();
     swPaint(); swTickCtl(); swPersist();
   };
+  document.getElementById("swSize").onclick=(e)=>{
+    e.stopPropagation();
+    SW.mode=(SW.mode+1)%3;
+    swApplyMode(); swPersist();
+  };
   document.getElementById("swReset").onclick=(e)=>{
     e.stopPropagation();
     SW.acc=0; if(SW.startTs) SW.startTs=Date.now();
@@ -1250,6 +1280,7 @@ function setupStopwatch(){
   let drag=null;
   wrap.addEventListener("pointerdown",(e)=>{
     if(e.target.tagName==="BUTTON") return;
+    if(SW.mode===2) return;
     drag={sx:e.clientX, sy:e.clientY, ox:wrap.offsetLeft, oy:wrap.offsetTop, live:false};
     wrap.setPointerCapture(e.pointerId);
   });
