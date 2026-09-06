@@ -520,7 +520,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION="0.9.0";
+const APP_VERSION="0.9.1";
 /* ================= DATA ================= */
 const C25K = {
  1:"8 rounds: 60s jog / 90s walk",
@@ -1172,6 +1172,9 @@ function renderProc(){
           (item.lift?'<span class="expand-hint">LOG ▾</span>':'')+
         '</div>';
 
+      if(!item.lift){
+        inner+='<div class="logger"><button class="notebtn" data-note="1">✎ add note</button></div>';
+      }
       if(item.lift){
         const sets=liftSets(S.tab,item);
         inner+='<div class="logger">';
@@ -1223,10 +1226,17 @@ function renderProc(){
       };
 
       const row=div.querySelector(".item-row");
+      const box=div.querySelector(".chk");
+      if(box) box.onclick=(e)=>{
+        e.stopPropagation();
+        S.checks[S.tab+"."+item.id]=!S.checks[S.tab+"."+item.id];
+        render(); saveState();
+      };
       row.onclick=(e)=>{
         if(item.lift && !div.classList.contains("open") && !S.checks[S.tab+"."+item.id]){
           div.classList.add("open"); return;
         }
+        if(!item.lift){ div.classList.toggle("open"); return; }
         S.checks[S.tab+"."+item.id]=!S.checks[S.tab+"."+item.id];
         render(); saveState();
       };

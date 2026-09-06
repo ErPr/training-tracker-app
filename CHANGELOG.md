@@ -2,6 +2,10 @@
 
 Version shows in the app header (BUILD vX.Y.Z). The sw.js cache name is locked to the version (tt-vX.Y.Z), so every version bump forces installed phones onto the new build. Commit convention: "vX.Y.Z: summary".
 
+## 0.9.1
+- Tap zones split on checklist items: the GO square marks complete, tapping the row body opens details (lift logger, or a note panel on non-lift items) so notes can be added before finishing
+- Every non-lift exercise now has its own add-note button
+
 ## 0.9.0
 - Version number displayed in header; cache name locked to version
 - One-time sweep of checkboxes stuck by the old stamp bug
