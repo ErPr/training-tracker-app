@@ -564,13 +564,13 @@ const SESSIONS = {
 /* ================= STATE ================= */
 const KEY = "training-tracker-v1";
 const SEQ = [
-  {tab:"push",    d:"D1", n:"PUSH"},
-  {tab:"runfull", d:"D2", n:"RUN F"},
-  {tab:"legs",    d:"D3", n:"LEGS"},
-  {tab:"runlite", d:"D4", n:"RUN L"},
-  {tab:"pull",    d:"D5", n:"PULL"},
-  {tab:"runfull", d:"D6", n:"RUN F"},
-  {tab:null,      d:"D7", n:"REST"}
+  {tab:"legs",    d:"D1", n:"LEGS"},
+  {tab:null,      d:"D2", n:"REST"},
+  {tab:"runfull", d:"D3", n:"RUN F"},
+  {tab:"push",    d:"D4", n:"PUSH"},
+  {tab:"runlite", d:"D5", n:"RUN L"},
+  {tab:"pull",    d:"D6", n:"PULL"},
+  {tab:"runfull", d:"D7", n:"RUN F"}
 ];
 let S = {
   week:1, runsThisWeek:0, tab:"push", view:"session",
@@ -866,7 +866,7 @@ function renderSeq(){
   tog.onclick=()=>{ S.seqHidden=!S.seqHidden; saveState(); render(); };
   document.getElementById("seqSkip").onclick=()=>{
     S.cycleIdx++;
-    if(S.cycleIdx>6){ S.cycleIdx=0; S.cycleDone=[]; toast("NEW CYCLE STARTED"); }
+    normalizeCycle();
     saveState(); render();
   };
   strip.innerHTML="";
@@ -885,25 +885,38 @@ function renderSeq(){
         else { S.tab=step.tab; S.view="session"; saveState(); render(); toast("NO LOG RECORD FOR "+step.n.toUpperCase()); }
       }
       else if(step.tab){ S.tab=step.tab; S.view="session"; saveState(); render(); }
-      else { S.cycleDone=[]; S.cycleIdx=0; saveState(); render(); toast("REST LOGGED · NEW CYCLE"); }
+      else {
+        if(!S.cycleDone.includes(i)) S.cycleDone.push(i);
+        S.cycleIdx=Math.max(S.cycleIdx,i+1);
+        normalizeCycle();
+        saveState(); render(); toast("REST LOGGED ✓");
+      }
     };
     strip.appendChild(c);
   });
   if(S.seqHidden){ hint.textContent=""; return; }
   const cur=SEQ[Math.min(S.cycleIdx,6)];
   hint.innerHTML = cur.tab
-    ? 'Up next: <b>'+cur.n+'</b> ('+cur.d+') — days slide freely, keep a day between runs.'
-    : 'Up next: <b>REST</b> — tap the chip to log it and start a new cycle.';
+    ? 'Up next: <b>'+cur.n+'</b> ('+cur.d+') — days slide freely, keep a day between runs and rest after legs.'
+    : 'Up next: <b>REST</b> — full day off after legs. Tap the chip to log it.';
 }
 
+function normalizeCycle(){
+  // any rest slot the cycle has moved past counts as taken
+  for(let i=0;i<S.cycleIdx;i++){
+    if(SEQ[i].tab===null && !S.cycleDone.includes(i)) S.cycleDone.push(i);
+  }
+  if(S.cycleIdx>=SEQ.length){ S.cycleDone=[]; S.cycleIdx=0; toast("CYCLE COMPLETE · NEW CYCLE"); }
+}
 function advanceCycle(tab){
   let pos=-1;
-  for(let i=S.cycleIdx;i<6;i++){ if(SEQ[i].tab===tab){pos=i;break;} }
-  if(pos<0){ for(let i=0;i<6;i++){ if(SEQ[i].tab===tab && !S.cycleDone.includes(i)){pos=i;break;} } }
+  for(let i=S.cycleIdx;i<SEQ.length;i++){ if(SEQ[i].tab===tab){pos=i;break;} }
+  if(pos<0){ for(let i=0;i<SEQ.length;i++){ if(SEQ[i].tab===tab && !S.cycleDone.includes(i)){pos=i;break;} } }
   if(pos>=0){
     if(!S.cycleDone.includes(pos)) S.cycleDone.push(pos);
     S.cycleIdx=Math.max(S.cycleIdx,pos+1);
   }
+  normalizeCycle();
 }
 
 function renderWeek(){
